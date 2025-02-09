@@ -3,12 +3,11 @@
 """
 Created on: Sat Dec 3 09:49:44 2022
 Last updated on: Thu Mar 14 08:06:38 2024
-@author: Jonathan E. Becker (jebecker3@wisc.edu)
+@author: Jonathan E. Becker
 """
 
 # Import Packages
 import io
-import platform
 import ast
 import os
 import glob
@@ -21,6 +20,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from csv import Sniffer
 import re
+import config
 
 #%% Local Functions
 # Get Delimiter
@@ -522,12 +522,12 @@ def prepare_hmda_for_stata(df) :
     """
 
     # Read Value Labels
-    value_label_file = f"{base_path}/cl/external_data/HMDA/raw_files/loans/hmda_value_labels.txt"
+    value_label_file = RAW_DIR / "loans/hmda_value_labels.txt"
     with open(value_label_file, 'r') as f :
         value_labels = ast.literal_eval(f.read())
 
     # Read Variable Labels
-    variable_label_file = f"{base_path}/cl/external_data/HMDA/raw_files/loans/hmda_variable_labels.txt"
+    variable_label_file = RAW_DIR / "loans/hmda_variable_labels.txt"
     with open(variable_label_file, 'r') as f :
         variable_labels = ast.literal_eval(f.read())
 
@@ -1034,47 +1034,44 @@ def get_file_type_code(file_name) :
 #%% Main Routine
 if __name__ == '__main__' :
 
-    # Setup: Define Base Folder
-    system_type = platform.system()
-    if 'windows' in system_type.lower() :
-        base_path = 'V:'
-    elif 'linux' in system_type.lower() :
-        base_path = '/project'
+    # Define Folder Paths
+    RAW_DIR = config.RAW_DIR
+    CLEAN_DIR = config.CLEAN_DIR
 
     ## Unzip HMDA Data
     # LAR
-    data_folder = f'{base_path}/cl/external_data/HMDA/zip_files/loans'
-    save_folder = f'{base_path}/cl/external_data/HMDA/raw_files/loans'
+    data_folder = RAW_DIR / 'loans'
+    save_folder = CLEAN_DIR / 'loans'
     # unzip_hmda_data(data_folder, save_folder, file_string = 'lar')
     # MSA-MD
-    data_folder = f'{base_path}/cl/external_data/HMDA/zip_files/msamd'
-    save_folder = f'{base_path}/cl/external_data/HMDA/raw_files/msamd'
+    data_folder = RAW_DIR / 'msamd'
+    save_folder = CLEAN_DIR / 'msamd'
     # unzip_hmda_data(data_folder, save_folder, file_string='msa')
     # Panel
-    data_folder = f'{base_path}/cl/external_data/HMDA/zip_files/panel'
-    save_folder = f'{base_path}/cl/external_data/HMDA/raw_files/panel'
+    data_folder = RAW_DIR / 'panel'
+    save_folder = CLEAN_DIR / 'panel'
     # unzip_hmda_data(data_folder, save_folder, file_string='panel')
     # Transmissal Series
-    data_folder = f'{base_path}/cl/external_data/HMDA/zip_files/transmissal_series'
-    save_folder = f'{base_path}/cl/external_data/HMDA/raw_files/transmissal_series'
+    data_folder = RAW_DIR / 'transmissal_series'
+    save_folder = CLEAN_DIR / 'transmissal_series'
     # unzip_hmda_data(data_folder, save_folder, file_string='ts')
 
     ## Import HMDA Data
-    data_folder = f'{base_path}/cl/external_data/HMDA/zip_files/loans'
-    temp_folder = f'{base_path}/cl/external_data/HMDA/raw_files/loans'
-    save_folder = f'{base_path}/cl/external_data/HMDA/clean_files'
+    data_folder = RAW_DIR / 'loans'
+    temp_folder = RAW_DIR / 'loans'
+    save_folder = CLEAN_DIR
     # for year in range(1990, 2006+1) :
     #     import_hmda_pre_2007(data_folder, save_folder, contains_string = f'{year}')
     import_hmda_2007_2017(data_folder, temp_folder, save_folder, min_year=2017, max_year=2017, save_to_stata=False)
     # import_hmda_post_2017(data_folder, temp_folder, save_folder, min_year=2018, max_year=2023) 
 
     # Combine Lender Files
-    ts_folder = f'{base_path}/cl/external_data/HMDA/raw_files/transmissal_series'
-    panel_folder = f'{base_path}/cl/external_data/HMDA/raw_files/panel'
-    save_folder = f'{base_path}/cl/external_data/HMDA'
+    ts_folder = RAW_DIR / 'transmissal_series'
+    panel_folder = RAW_DIR / 'panel'
+    save_folder = CLEAN_DIR
     # combine_lenders_panel_ts_pre2018(panel_folder, ts_folder, save_folder, min_year = 2007, max_year = 2017)
     # combine_lenders_panel_ts(panel_folder, ts_folder, save_folder, min_year = 2018, max_year = 2022)
 
     # Update File List
-    data_folder = f'{base_path}/cl/external_data/HMDA/clean_files'
+    data_folder = CLEAN_DIR
     update_file_list(data_folder)
