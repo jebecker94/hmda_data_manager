@@ -38,3 +38,6 @@ htmlcov/
 # Local development files
 .local/
 *.local
+
+# Data Folders
+data/*
