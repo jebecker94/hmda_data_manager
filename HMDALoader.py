@@ -8,7 +8,7 @@ Created on Fri Jul 19 10:20:24 2024
 import pandas as pd
 
 # Get List of HMDA Files
-def get_hmda_files(data_folder, min_year=None, max_year=None, version_type=None, extension=None) :
+def get_hmda_files(data_folder, file_type='lar', min_year=None, max_year=None, version_type=None, extension=None) :
     """
     Gets the list of most up-to-date HMDA files.
 
@@ -38,6 +38,9 @@ def get_hmda_files(data_folder, min_year=None, max_year=None, version_type=None,
     # Load File List
     df = pd.read_csv(list_file)
 
+    # Filter by FileType
+    df = df.query(f'FileType.str.lower() == "{file_type.lower()}"')
+
     # Filter by Years
     if min_year :
         df = df.query(f'Year >= {min_year}')
@@ -64,9 +67,10 @@ def get_hmda_files(data_folder, min_year=None, max_year=None, version_type=None,
     df = df.sort_values(by=['Year'])
 
     # Get File Names And Add Extensions
+    folders = list(df.FolderName)
     files = list(df.FilePrefix)
     if extension :
-        files = [f'{data_folder}/{x}.{extension}' for x in files]
+        files = [f'{x}/{y}.{extension}' for x,y in zip(folders,files)]
 
     # Return File List
     return files
