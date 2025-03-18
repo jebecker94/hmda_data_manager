@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Mar 18 07:00:00 2025
+@author: Jonathan E. Becker
+"""
+
 # Import Packages
 import pandas as pd
 import glob

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Apr 26 14:15:32 2022
-@author: jebecker3
+@author: Jonathan E. Becker
 """
 
 # Import Packages

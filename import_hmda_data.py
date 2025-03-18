@@ -1057,6 +1057,7 @@ def add_hmda_indexes(data_folder, save_folder, min_year=2018, max_year=2023) :
     max_year=2021
     for year in range(min_year, max_year+1) :
         files = glob.glob(f"{data_folder}/*{year}*.parquet")
+        files = [file for file in files if '_w_index' not in file]
         for file in files :
             lf = pl.scan_parquet(file)
             if 'HMDAIndex' not in lf.collect_schema().names() :
@@ -1065,7 +1066,7 @@ def add_hmda_indexes(data_folder, save_folder, min_year=2018, max_year=2023) :
                 HMDAIndex = range(lf.select(pl.len()).collect().item())
                 HMDAIndex = [str(year)+file_type+'_'+str(x).zfill(9) for x in HMDAIndex]
                 lf = lf.with_columns(pl.Series(HMDAIndex).alias("HMDAIndex"))
-                lf.sink_parquet(file.replace('.parquet','_temp.parquet'))
+                lf.sink_parquet(file.replace('.parquet','_w_index.parquet'))
 
 #%% Combine Files
 # Combine Lenders After 2018
