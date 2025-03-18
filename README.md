@@ -21,9 +21,20 @@ Major functions on this project include:
 # The HMDAIndex Variable
 As part of the data ingestion process, these import scripts create a new variable called 'HMDAIndex' for data released starting in 2018.
 
-Construction: The HMDAIndex variable has format YYYYt_#########, which is constructed from three components:
+Construction:
+The HMDAIndex variable has format YYYYt_#########, which is constructed from three components:
 - The data coverage year YYYY: The four-digit year covered by the data.
 - The file type code t: A one-digit alphanumeric character identifying the HMDA file type. This takes values of 'a' for three-year files, 'b' for the one-year files, 'c' for the snapshot files, and 'd' for the (preliminary) MLAR files.
 - The row number #########: A nine-digit number identifying the row number in the HMDA file for year YYYY and type code t. Note that values are left-padded with zeros and begin with 000000000.
 
-Purpose: There are no unique identifiers in the HMDA data files released starting in 2018. This makes it difficult to share code and derived datasets between researchers using their own versions of the HMDA files. The HMDAIndex variable follows a straightforward construction procedure and makes it easy for any researcher to reconsruct a unique identifier to reference specific HMDA observations in derived datasets like crosswalks.
+Purpose:
+There are no unique identifiers in the HMDA data files released starting in 2018. This makes it difficult to share code and derived datasets between researchers using their own versions of the HMDA files. The HMDAIndex variable follows a straightforward construction procedure and makes it easy for any researcher to reconsruct a unique identifier to reference specific HMDA observations in derived datasets like crosswalks.
+
+# Matching HMDA Sellers and Purchasers
+HMDA's reporting requirements mean that loans which are originated and sold to a non-GSE are reported twice--once as an originated loan (action_taken==1) and once as a purchased loan (action_taken==6).
+
+We provide preliminary matching scripts that match loan originations to subsequent loan purchases.
+
+This can be used in a number of ways:
+- Studying seller-purchaser relationships in the wholesale mortgage market
+- Improving matches between HMDA and other datasets by providing a better lender identifier for subsequent matches (e.g., matching forward to MBS transactions)

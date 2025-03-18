@@ -8,8 +8,9 @@ Created on Tue Apr 26 14:15:32 2022
 import os
 import glob
 import pandas as pd
+import config
 
-## Main Routine
+# Combine Crosswalks
 def combine_crosswalks(data_folder, first_year=2012, last_year=2022) :
 
     # Get All Files
@@ -62,12 +63,15 @@ def combine_crosswalks(data_folder, first_year=2012, last_year=2022) :
     df = df[['ZIPSHORT','TRACT']].drop_duplicates()
     df.to_parquet(f'{data_folder}/zip_tract_crosswalk_rounded_{first_year}-{last_year}.parquet', index=False)
 
-## Main Routine
+# Main Routine
 if __name__ == '__main__' :
 
+    # Set Folder Paths
+    DATA_DIR = config.DATA_DIR
+
     # Combine Crosswalks
-    data_folder = '/project/cl/external_data/census_tract_zipcode_crosswalks'
+    data_folder = DATA_DIR / 'misc'
     # combine_crosswalks(data_folder, first_year = 2010, last_year = 2011)
     # combine_crosswalks(data_folder, first_year = 2012, last_year = 2022)
-    combine_crosswalks(data_folder, first_year = 2010, last_year = 2022)
+    # combine_crosswalks(data_folder, first_year = 2010, last_year = 2022)
     # combine_crosswalks(data_folder, first_year = 2023, last_year = 2023)

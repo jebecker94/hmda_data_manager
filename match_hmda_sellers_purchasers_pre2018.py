@@ -7,12 +7,12 @@ Last updated on: Sat Feb 11 10:45:24 2023
 """
 
 # Import Packages
-import platform
 import glob
 import pandas as pd
 import numpy as np
 import pyarrow.parquet as pq
 import pyarrow as pa
+import config
 
 #%% Local Functions
 # Save Crosswalk
@@ -577,15 +577,11 @@ def match_hmda_sellers_purchasers_round2(data_folder, save_folder, min_year = 20
 #%% Main Routine
 if __name__ == '__main__' :
 
-    # Setup: Define Base Folder
-    system_type = platform.system()
-    if 'windows' in system_type.lower() :
-        base_path = 'V:'
-    elif 'linux' in system_type.lower() :
-        base_path = '/project'
+    # Set Folder Paths
+    DATA_DIR = config.DATA_DIR
+    DATA_FOLDER = DATA_DIR / 'clean'
+    SAVE_FOLDER = DATA_DIR / 'match_data/match_sellers_purchasers_pre2018'
 
     # Unzip HMDA Data
-    DATA_FOLDER = f'{base_path}/cl/external_data/HMDA/clean_files'
-    SAVE_FOLDER = f'{base_path}/cl/work_folder/match_hmda_sellers_purchasers'
     # match_hmda_sellers_purchasers_round1(DATA_FOLDER, SAVE_FOLDER, min_year=2007, max_year=2017)
     # match_hmda_sellers_purchasers_round2(DATA_FOLDER, SAVE_FOLDER, min_year=2007, max_year=2017)
