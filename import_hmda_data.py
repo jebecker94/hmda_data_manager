@@ -24,6 +24,7 @@ import re
 import config
 import time
 import polars as pl
+import shutil
 
 #%% Local Functions
 # Get Delimiter
@@ -1033,7 +1034,7 @@ def import_hmda_post_2017_streaming(data_folder, save_folder, schema_file, min_y
                     os.remove(raw_file)
 
 # Add HMDAIndex to HMDA Files
-def add_hmda_indexes(data_folder, save_folder, min_year=2018, max_year=2023) :
+def add_hmda_indexes(data_folder, min_year=2018, max_year=2023) :
     """
     Add HMDA Indexes to HMDA data.
 
@@ -1053,8 +1054,6 @@ def add_hmda_indexes(data_folder, save_folder, min_year=2018, max_year=2023) :
     """
 
     # Get Files
-    min_year=2020
-    max_year=2021
     for year in range(min_year, max_year+1) :
         files = glob.glob(f"{data_folder}/*{year}*.parquet")
         files = [file for file in files if '_w_index' not in file]
@@ -1067,6 +1066,12 @@ def add_hmda_indexes(data_folder, save_folder, min_year=2018, max_year=2023) :
                 HMDAIndex = [str(year)+file_type+'_'+str(x).zfill(9) for x in HMDAIndex]
                 lf = lf.with_columns(pl.Series(HMDAIndex).alias("HMDAIndex"))
                 lf.sink_parquet(file.replace('.parquet','_w_index.parquet'))
+
+    # Rename Files w/ Indices
+    for year in range(min_year, max_year+1) :
+        files = glob.glob(f"{data_folder}/*{year}*_w_index.parquet")
+        print(files)
+        shutil.move(files[0], files[0].replace('_w_index',''))
 
 #%% Combine Files
 # Combine Lenders After 2018
@@ -1360,7 +1365,7 @@ if __name__ == '__main__' :
     save_folder = CLEAN_DIR / 'loans'
     schema_file='./schemas/hmda_lar_schema_post2018.html'
     # import_hmda_post_2017_streaming(data_folder, save_folder, schema_file)
-    # add_hmda_indexes(save_folder, save_folder, min_year=2020, max_year=2021)
+    # add_hmda_indexes(save_folder, min_year=2020, max_year=2021)
 
     data_folder = RAW_DIR / 'transmissal_series'
     save_folder = CLEAN_DIR / 'transmissal_series'
@@ -1380,6 +1385,6 @@ if __name__ == '__main__' :
 
     # Update File List
     data_folder = CLEAN_DIR
-    # update_file_list(data_folder)
+    update_file_list(data_folder)
 
 #%%

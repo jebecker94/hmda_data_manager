@@ -15,10 +15,66 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import matplotlib.pyplot as plt
 import HMDALoader
+import config
 
 #%% Local Functions
+# Get Match Columns
+def get_match_columns(file) :
+    """
+    Get columns used for matching.
+
+    Parameters
+    ----------
+    file : str
+        File to load for columns.
+
+    Returns
+    -------
+    columns : list
+        Columns used for matching.
+
+    """
+
+    # Load File Column Names
+    columns = pq.read_metadata(file).schema.names
+
+    # Drop Columns Not Used in Match
+    drop_columns = [
+        'denial_reason',
+        'denial_reason_1',
+        'denial_reason_2',
+        'denial_reason_3',
+        'denial_reason_4',
+        'aus',
+        'aus_1',
+        'aus_2',
+        'aus_3',
+        'aus_4',
+        'aus_5',
+        'applicant_credit_score_type',
+        'co_applicant_credit_score_type',
+        'initially_payable_to_institution',
+        'submission_of_application',
+        'tract_population',
+        'tract_minority_population_percent',
+        'ffiec_msa_md_median_family_income',
+        'tract_to_msa_income_percentage',
+        'tract_owner_occupied_units',
+        'tract_one_to_four_family_homes',
+        'tract_median_age_of_housing_units',
+        'derived_loan_product_type',
+        'derived_dwelling_category',
+        'derived_ethnicity',
+        'derived_race',
+        'derived_sex',
+    ]
+    columns = [x for x in columns if x not in drop_columns]
+    
+    # Return Columns
+    return columns
+
 # Load HMDA Data
-def load_data(data_folder, min_year=2018, max_year=2023) :
+def load_data(data_folder, min_year=2018, max_year=2023, added_filters=[]) :
     """
     Combine HMDA data after 2018, keeping originations and purchases only. For
     use primarily in matching after the first round.
@@ -38,59 +94,23 @@ def load_data(data_folder, min_year=2018, max_year=2023) :
         Combined HMDA data.
 
     """
-    
+
+    # Set Filters
+    hmda_filters = [('action_taken','in',[1,6])]
+    hmda_filters += added_filters
+
     # Combine Seller and Purchaser Data
     df = []
     for year in range(min_year, max_year+1) :
         file = HMDALoader.get_hmda_files(data_folder, min_year=year, max_year=year, extension='parquet')[0]
-        df_a = pq.read_table(file, filters=[('action_taken','in',[1,6])]).to_pandas(date_as_object = False)
-        df_a = df_a.loc[~(df_a['purchaser_type'].isin([1, 2, 3, 4]) & (df_a['action_taken'] == 1))]
+        hmda_columns = get_match_columns(file)
+        df_a = pd.read_parquet(file, columns=hmda_columns, filters=hmda_filters)
         df_a = df_a.query('purchaser_type not in [1,2,3,4] | action_taken == 6')
         df.append(df_a)
         del df_a
     df = pd.concat(df)
-    
+
     # Return DataFrame
-    return df
-
-# Drop Nonmatch Columns
-def drop_nonmatch_columns(df) :
-    """
-    Drop HMDA columns not used for matches.
-
-    Parameters
-    ----------
-    df : pandas DataFrame
-        Data with all HMDA columns.
-
-    Returns
-    -------
-    df : pandas DataFrame
-        Data without irrelevant HMDA columns.
-
-    """
-    
-    # Drop Columns
-    drop_cols = ['denial_reason',
-                 'denial_reason_1',
-                 'denial_reason_2',
-                 'denial_reason_3',
-                 'denial_reason_4',
-                 'aus',
-                 'aus_1',
-                 'aus_2',
-                 'aus_3',
-                 'aus_4',
-                 'aus_5',
-                 'applicant_credit_score_type',
-                 'co_applicant_credit_score_type',
-                 'initially_payable_to_institution',
-                 'submission_of_application']
-    
-    drop_cols = [x for x in drop_cols if x in df.columns]
-    
-    df = df.drop(columns = drop_cols)
-    
     return df
 
 # Replace Missing Values
@@ -150,6 +170,136 @@ def replace_missing_values(df) :
 
     # Replace Weird Introductory Rate Periods
     df.loc[df['intro_rate_period'] == df['loan_term'], 'intro_rate_period'] = None
+
+    # Return DataFrame
+    return df
+
+# Convert Numerics
+def convert_numerics(df) :
+    """
+    Destring numeric HMDA variables after 2018.
+
+    Parameters
+    ----------
+    df : pandas DataFrame
+        DESCRIPTION.
+
+    Returns
+    -------
+    df : pandas DataFrame
+        DESCRIPTION.
+
+    """
+
+    # Replace Exempt w/ -99999
+    exempt_cols = ['combined_loan_to_value_ratio',
+                   'interest_rate',
+                   'rate_spread',
+                   'loan_term',
+                   'prepayment_penalty_term',
+                   'intro_rate_period',
+                   'income',
+                   'multifamily_affordable_units',
+                   'property_value',
+                   'total_loan_costs',
+                   'total_points_and_fees',
+                   'origination_charges',
+                   'discount_points',
+                   'lender_credits',
+                   ]
+    for col in exempt_cols :
+        df.loc[df[col] == "Exempt", col] = -99999
+        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+
+    # Clean Units
+    col = 'total_units'
+    df.loc[df[col] == "5-24", col] = 5
+    df.loc[df[col] == "25-49", col] = 6
+    df.loc[df[col] == "50-99", col] = 7
+    df.loc[df[col] == "100-149", col] = 8
+    df.loc[df[col] == ">149", col] = 9
+    df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Clean Age
+    for col in ['applicant_age', 'co_applicant_age'] :
+        df.loc[df[col] == "<25", col] = 1
+        df.loc[df[col] == "25-34", col] = 2
+        df.loc[df[col] == "35-44", col] = 3
+        df.loc[df[col] == "45-54", col] = 4
+        df.loc[df[col] == "55-64", col] = 5
+        df.loc[df[col] == "65-74", col] = 6
+        df.loc[df[col] == ">74", col] = 7
+        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+
+    # Clean Age Dummy Variables
+    for col in ['applicant_age_above_62', 'co_applicant_age_above_62'] :
+        df.loc[df[col].isin(["No","no","NO"]), col] = 0
+        df.loc[df[col].isin(["Yes","yes","YES"]), col] = 1
+        df.loc[df[col].isin(["Na","na","NA"]), col] = np.nan
+        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+
+	# Clean Debt-to-Income
+    col = 'debt_to_income_ratio'
+    df.loc[df[col] == "<20%", col] = 10
+    df.loc[df[col] == "20%-<30%", col] = 20
+    df.loc[df[col] == "30%-<36%", col] = 30
+    df.loc[df[col] == "50%-60%", col] = 50
+    df.loc[df[col] == ">60%", col] = 60
+    df.loc[df[col] == "Exempt", col] = -99999
+    df[col] = pd.to_numeric(df[col], errors = 'coerce')
+
+	# Clean Conforming Loan Limit
+    col = 'conforming_loan_limit'
+    if col in df.columns :
+        df.loc[df[col] == "NC", col] = 0
+        df.loc[df[col] == "C", col] = 1
+        df.loc[df[col] == "U", col] = 1111
+        df.loc[df[col] == "NA", col] = -1111
+        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+
+    # Numeric and Categorical Columns
+    numeric_columns = [
+        'activity_year',
+        'loan_type',
+        'loan_purpose',
+        'occupancy_type',
+        'loan_amount',
+        'action_taken',
+        'msa_md',
+        'county_code',
+        'applicant_race_1',
+        'applicant_race_2',
+        'applicant_race_3',
+        'applicant_race_4',
+        'applicant_race_5',
+        'co_applicant_race_1',
+        'co_applicant_race_2',
+        'co_applicant_race_3',
+        'co_applicant_race_4',
+        'co_applicant_race_5',
+        'applicant_sex',
+        'co_applicant_sex',
+        'income',
+        'purchaser_type',
+        'denial_reason_1',
+        'denial_reason_2',
+        'denial_reason_3',
+        'edit_status',
+        'sequence_number',
+        'rate_spread',
+        'tract_population',
+        'tract_minority_population_percent',
+        'ffiec_msa_md_median_family_income',
+        'tract_to_msa_income_percentage',
+        'tract_owner_occupied_units',
+        'tract_one_to_four_family_homes',
+        'tract_median_age_of_housing_units',
+    ]
+
+    # Convert Columns to Numeric
+    for numeric_column in numeric_columns :
+        if numeric_column in df.columns :
+            df[numeric_column] = pd.to_numeric(df[numeric_column], errors='coerce')
 
     # Return DataFrame
     return df
@@ -705,13 +855,13 @@ def match_hmda_sellers_purchasers_round1(data_folder, save_folder, min_year=2018
     Parameters
     ----------
     data_folder : str
-        DESCRIPTION.
+        Folder where raw HMDA files are stored.
     save_folder : str
-        DESCRIPTION.
+        Folder where matches and match candidates will be saved.
     min_year : int, optional
-        DESCRIPTION. The default is 2018.
+        First year of data to be matched. The default is 2018.
     max_year : int, optional
-        DESCRIPTION. The default is 2023.
+        Last year of data to be matched. The default is 2023.
 
     Returns
     -------
@@ -723,23 +873,27 @@ def match_hmda_sellers_purchasers_round1(data_folder, save_folder, min_year=2018
     df = []
     for year in range(min_year, max_year+1) :
 
+        print(year)
+
         # Load Data
         df_a = load_data(data_folder, min_year=year, max_year=year)
 
-        # Drop Unused Colummns
-        df_a = drop_nonmatch_columns(df_a)
+        # Convert Numerics
+        df_a = convert_numerics(df_a)
 
         # Replace Missings
         df_a = replace_missing_values(df_a)
 
         # Drop Observations with Missing Match Variables
-        match_columns = ['loan_type',
-                         'loan_amount',
-                         'census_tract',
-                         'occupancy_type',
-                         'loan_purpose']
-        df_a = df_a.dropna(subset = match_columns)
-        df_a = df_a.query('census_tract != ""')
+        match_columns = [
+            'loan_type',
+            'loan_amount',
+            'census_tract',
+            'occupancy_type',
+            'loan_purpose',
+        ]
+        df_a = df_a.dropna(subset=match_columns)
+        df_a = df_a.query('census_tract not in ["","NA"]')
 
         # Split into Sellers/Purchasers and Merge
         df_a, df_purchaser = split_sellers_and_purchasers(df_a, save_folder)
@@ -747,9 +901,10 @@ def match_hmda_sellers_purchasers_round1(data_folder, save_folder, min_year=2018
         del df_purchaser
 
         # Keep Close Matches with tolerances
-        match_tolerances = {'income': 1,
-                            'interest_rate': .0625,
-                            }
+        match_tolerances = {
+            'income': 1,
+            'interest_rate': .0625,
+        }
         df_a = numeric_matches(df_a, match_tolerances, verbose=False)
 
         # Weak Numeric Matches
@@ -770,22 +925,23 @@ def match_hmda_sellers_purchasers_round1(data_folder, save_folder, min_year=2018
         df_a = match_ethnicity(df_a)
 
         # Keep Close Matches with tolerances
-        match_tolerances = {'conforming_loan_limit': 0,
-                            'construction_method': 0,
-                            'discount_points': 5,
-                            'income': 1,
-                            'interest_rate': .0625,
-                            'intro_rate_period': 6,
-                            'lender_credits': 5,
-                            'lien_status': 0,
-                            'loan_term': 12,
-                            'open_end_line_of_credit': 0,
-                            'origination_charges': 5,
-                            'property_value': 20000,
-                            'total_units': 0,
-                            'applicant_age_above_62': 0,
-                            'co_applicant_age_above_62': 0,
-                            }
+        match_tolerances = {
+            'conforming_loan_limit': 0,
+            'construction_method': 0,
+            'discount_points': 5,
+            'income': 1,
+            'interest_rate': .0625,
+            'intro_rate_period': 6,
+            'lender_credits': 5,
+            'lien_status': 0,
+            'loan_term': 12,
+            'open_end_line_of_credit': 0,
+            'origination_charges': 5,
+            'property_value': 20000,
+            'total_units': 0,
+            'applicant_age_above_62': 0,
+            'co_applicant_age_above_62': 0,
+        }
         df_a = numeric_matches(df_a, match_tolerances, verbose=True)
 
         # Clean Up
@@ -819,9 +975,6 @@ def match_hmda_sellers_purchasers_round2(data_folder, save_folder, min_year=2018
 
     # Combine Seller and Purchaser Data
     df = load_data(data_folder, min_year=min_year, max_year=max_year)
-
-    # Drop Unused Colummns
-    df = drop_nonmatch_columns(df)
 
     # Replace Missings
     df = replace_missing_values(df)
@@ -919,9 +1072,6 @@ def match_hmda_sellers_purchasers_round3(data_folder, save_folder, min_year=2018
     # Combine Seller and Purchaser Data
     df = load_data(data_folder, min_year = min_year, max_year = max_year)
 
-    # Drop Unused Colummns
-    df = drop_nonmatch_columns(df)
-
     # Replace Missings
     df = replace_missing_values(df)
 
@@ -1008,9 +1158,6 @@ def match_hmda_sellers_purchasers_round4(data_folder, save_folder, min_year=2018
 
     # Combine Seller and Purchaser Data
     df = load_data(data_folder, min_year=min_year, max_year=max_year)
-
-    # Drop Unused Colummns
-    df = drop_nonmatch_columns(df)
 
     # Replace Missings
     df = replace_missing_values(df)
@@ -1105,10 +1252,7 @@ def match_hmda_sellers_purchasers_round5(data_folder, save_folder, min_year=2018
 
         # Load HMDA Data
         df_a = load_data(data_folder, min_year=year, max_year=year)
-    
-        # Drop Unused Colummns
-        df_a = drop_nonmatch_columns(df_a)
-    
+
         # Replace Missings
         df_a = replace_missing_values(df_a)
 
@@ -1236,9 +1380,6 @@ def match_hmda_sellers_purchasers_round6(data_folder, save_folder, min_year=2018
     # Keep Only Affiliate Sales among Originations
     df = df.query('action_taken == 6 | purchaser_type == 8')
 
-    # Drop Unused Colummns
-    df = drop_nonmatch_columns(df)
-
     # Replace Missings
     df = replace_missing_values(df)
 
@@ -1350,9 +1491,6 @@ def match_hmda_sellers_purchasers_round7(data_folder, save_folder, min_year=2018
 
     # Load Data
     df = load_data(data_folder, min_year=min_year, max_year=max_year)
-
-    # Drop Unused Colummns
-    df = drop_nonmatch_columns(df)
 
     # Replace Missings
     df = replace_missing_values(df)
@@ -1476,9 +1614,6 @@ def match_hmda_sellers_purchasers_round8(data_folder, save_folder, min_year=2018
     df = load_data(data_folder, min_year=min_year, max_year=max_year)
 
     df = df.query('action_taken == 6 | purchaser_type != 0')
-
-    # Drop Unused Colummns
-    df = drop_nonmatch_columns(df)
 
     # Replace Missings
     df = replace_missing_values(df)
@@ -1861,16 +1996,10 @@ def get_lei_match_counts(data_folder, match_folder, match_round, min_year=2018, 
 #%% Main Routine
 if __name__ == '__main__' :
     
-    # Setup: Define Base Folder
-    system_type = platform.system()
-    if 'windows' in system_type.lower() :
-        base_path = 'V:'
-    elif 'linux' in system_type.lower() :
-        base_path = '/project'
-
     # Unzip HMDA Data
-    DATA_FOLDER = f'{base_path}/cl/external_data/HMDA/clean_files'
-    SAVE_FOLDER = f'{base_path}/cl/work_folder/match_hmda_sellers_purchasers'
+    DATA_DIR = config.DATA_DIR
+    DATA_FOLDER = DATA_DIR / 'clean'
+    SAVE_FOLDER = DATA_DIR / 'match_data/match_sellers_purchasers_post2018'
     file_suffix = '_202409'
 
     # Conduct Matches in Rounds
@@ -1889,7 +2018,7 @@ if __name__ == '__main__' :
 
     # create_matched_file(DATA_FOLDER, SAVE_FOLDER, min_year=2018, max_year=2023, match_round=8, file_suffix=file_suffix)
     
-    ## Examine Match Data
-    match_folder = SAVE_FOLDER
-    match_round = 8
-    df = pd.read_parquet(f'{match_folder}/hmda_seller_purchaser_matched_loans_round{match_round}{file_suffix}.parquet')
+    # ## Examine Match Data
+    # match_folder = SAVE_FOLDER
+    # match_round = 8
+    # df = pd.read_parquet(f'{match_folder}/hmda_seller_purchaser_matched_loans_round{match_round}{file_suffix}.parquet')
