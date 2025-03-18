@@ -10,7 +10,7 @@ import glob
 import pandas as pd
 
 ## Main Routine
-def combine_crosswalks(data_folder, first_year = 2012, last_year = 2022) :
+def combine_crosswalks(data_folder, first_year=2012, last_year=2022) :
 
     # Get All Files
     files = glob.glob(f'{data_folder}/ZIP_TRACT_*.xlsx')
@@ -60,14 +60,7 @@ def combine_crosswalks(data_folder, first_year = 2012, last_year = 2022) :
     # Round and save
     df['ZIPSHORT'] = [x[0:3]+'00' for x in df['ZIP']]
     df = df[['ZIPSHORT','TRACT']].drop_duplicates()
-    df.to_csv(f'{data_folder}/zip_tract_crosswalk_rounded_{first_year}-{last_year}.csv',
-              index = False,
-              sep = '|',
-              )
-    df.to_stata(f'{data_folder}/zip_tract_crosswalk_rounded_{first_year}-{last_year}.dta',
-                write_index = False,
-                version = 118,
-                )
+    df.to_parquet(f'{data_folder}/zip_tract_crosswalk_rounded_{first_year}-{last_year}.parquet', index=False)
 
 ## Main Routine
 if __name__ == '__main__' :

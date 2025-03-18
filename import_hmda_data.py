@@ -23,6 +23,7 @@ from csv import Sniffer
 import re
 import config
 import time
+import polars as pl
 
 #%% Local Functions
 # Get Delimiter
@@ -309,6 +310,20 @@ def rename_hmda_columns(df) :
 
 # Dstring HMDA Columns before 2007
 def destring_hmda_cols_pre2007(df) :
+    """
+    Destring numeric HMDA columns before 2007.
+
+    Parameters
+    ----------
+    df : pandas DataFrame
+        DESCRIPTION.
+    
+    Returns
+    -------
+    df : pandas DataFrame
+        DESCRIPTION.
+
+    """
     
     # Numeric and Categorical Columns
     numeric_columns = ['activity_year',
@@ -1017,6 +1032,41 @@ def import_hmda_post_2017_streaming(data_folder, save_folder, schema_file, min_y
                     time.sleep(1)
                     os.remove(raw_file)
 
+# Add HMDAIndex to HMDA Files
+def add_hmda_indexes(data_folder, save_folder, min_year=2018, max_year=2023) :
+    """
+    Add HMDA Indexes to HMDA data.
+
+    Parameters
+    ----------
+    data_folder : str
+        Folder where data is stored.
+    min_year : int, optional
+        First year of data to add HMDAIndex to. The default is 2018.
+    max_year : int, optional
+        Last year of data to add HMDAIndex to. The default is 2023.
+    
+    Returns
+    -------
+    None.
+
+    """
+
+    # Get Files
+    min_year=2020
+    max_year=2021
+    for year in range(min_year, max_year+1) :
+        files = glob.glob(f"{data_folder}/*{year}*.parquet")
+        for file in files :
+            lf = pl.scan_parquet(file)
+            if 'HMDAIndex' not in lf.collect_schema().names() :
+                print('Adding HMDA Index to:', file)
+                file_type = get_file_type_code(file)
+                HMDAIndex = range(lf.select(pl.len()).collect().item())
+                HMDAIndex = [str(year)+file_type+'_'+str(x).zfill(9) for x in HMDAIndex]
+                lf = lf.with_columns(pl.Series(HMDAIndex).alias("HMDAIndex"))
+                lf.sink_parquet(file.replace('.parquet','_temp.parquet'))
+
 #%% Combine Files
 # Combine Lenders After 2018
 def combine_lenders_panel_ts_post2018(panel_folder, ts_folder, save_folder, min_year = 2018, max_year = 2023) :
@@ -1308,25 +1358,27 @@ if __name__ == '__main__' :
     data_folder = RAW_DIR / 'loans'
     save_folder = CLEAN_DIR / 'loans'
     schema_file='./schemas/hmda_lar_schema_post2018.html'
-    import_hmda_post_2017_streaming(data_folder, save_folder, schema_file)
+    # import_hmda_post_2017_streaming(data_folder, save_folder, schema_file)
+    # add_hmda_indexes(save_folder, save_folder, min_year=2020, max_year=2021)
+
     data_folder = RAW_DIR / 'transmissal_series'
     save_folder = CLEAN_DIR / 'transmissal_series'
     schema_file='./schemas/hmda_ts_schema_post2018.html'
-    import_hmda_post_2017_streaming(data_folder, save_folder, schema_file)
+    # import_hmda_post_2017_streaming(data_folder, save_folder, schema_file)
     data_folder = RAW_DIR / 'panel'
     save_folder = CLEAN_DIR / 'panel'
     schema_file='./schemas/hmda_panel_schema_post2018.html'
-    import_hmda_post_2017_streaming(data_folder, save_folder, schema_file)
+    # import_hmda_post_2017_streaming(data_folder, save_folder, schema_file)
 
     # Combine Lender Files
     ts_folder = CLEAN_DIR / 'transmissal_series'
     panel_folder = CLEAN_DIR / 'panel'
     save_folder = PROJECT_DIR / 'data'
     # combine_lenders_panel_ts_pre2018(panel_folder, ts_folder, save_folder, min_year = 2007, max_year = 2017)
-    combine_lenders_panel_ts_post2018(panel_folder, ts_folder, save_folder, min_year=2018, max_year=2023)
+    # combine_lenders_panel_ts_post2018(panel_folder, ts_folder, save_folder, min_year=2018, max_year=2023)
 
     # Update File List
     data_folder = CLEAN_DIR
-    update_file_list(data_folder)
+    # update_file_list(data_folder)
 
-# %%
+#%%
