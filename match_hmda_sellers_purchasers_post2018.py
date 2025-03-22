@@ -1841,7 +1841,7 @@ def get_affiliates(data_folder, match_folder, match_round, min_year=2018, max_ye
     df.to_csv(f'{match_folder}/affiliate_lei_matches_round{match_round}{file_suffix}.csv', index = False)
 
     # Load TS/Panel Data and Merge in Names
-    lender_folder = f'{base_path}/cl/external_data/HMDA'
+    lender_folder = DATA_DIR
     lei_names = pd.read_csv(f'{lender_folder}/hmda_lenders_combined_2018-2022.csv',
                             sep = '|',
                             usecols = ['lei', 'respondent_name_panel', 'respondent_name_ts'],

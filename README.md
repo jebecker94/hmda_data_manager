@@ -38,3 +38,10 @@ We provide preliminary matching scripts that match loan originations to subseque
 This can be used in a number of ways:
 - Studying seller-purchaser relationships in the wholesale mortgage market
 - Improving matches between HMDA and other datasets by providing a better lender identifier for subsequent matches (e.g., matching forward to MBS transactions)
+
+# How to Use This Project
+In order to use this project, there are a few manual steps to take before you can run the code.
+
+1. Download HMDA data
+- Navigate to the HMDA data website and download the static files you with to use.
+2. Place the zip files in the raw data folder

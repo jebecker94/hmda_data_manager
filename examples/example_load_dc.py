@@ -23,5 +23,3 @@ if __name__=='__main__':
         df_a = pd.read_parquet(file, filters=[('state_code','==','DC')])
         df.append(df_a)
     df = pd.concat(df)
-
-

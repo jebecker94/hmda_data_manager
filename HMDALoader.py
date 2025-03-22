@@ -6,9 +6,13 @@ Created on Fri Jul 19 10:20:24 2024
 
 # Import Packages
 import pandas as pd
+import config
+
+# Set Folder Paths
+DATA_DIR = config.DATA_DIR
 
 # Get List of HMDA Files
-def get_hmda_files(data_folder, file_type='lar', min_year=None, max_year=None, version_type=None, extension=None) :
+def get_hmda_files(data_folder=DATA_DIR, file_type='lar', min_year=None, max_year=None, version_type=None, extension=None) :
     """
     Gets the list of most up-to-date HMDA files.
 
