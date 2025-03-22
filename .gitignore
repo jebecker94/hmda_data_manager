@@ -39,5 +39,6 @@ htmlcov/
 .local/
 *.local
 
-# Data Folders
+# Data and Output Folders
 data/*
+output/*
