@@ -13,3 +13,5 @@ data/*
 output/*
 data
 output
+deprecated
+deprecated/*

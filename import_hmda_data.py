@@ -18,7 +18,6 @@ import subprocess
 from pyarrow import csv
 import pyarrow as pa
 import pyarrow.parquet as pq
-import dask.dataframe as dd
 from csv import Sniffer
 import re
 import config
@@ -98,7 +97,7 @@ def get_file_schema(schema_file, schema_type='pyarrow') :
         for _,row in df.iterrows() :
             pa_type = pa.string()
             if (row['Type'] == 'Numeric'):
-                pa_type = pa.int64()
+                pa_type = pa.float64()
             if (row['Type'] == 'Numeric') & (row[LengthVar] <= 4):
                 pa_type = pa.int16()
             if (row['Type'] == 'Numeric') & (row[LengthVar] > 4):
@@ -114,7 +113,7 @@ def get_file_schema(schema_file, schema_type='pyarrow') :
         for _,row in df.iterrows() :
             pd_type = 'str'
             if (row['Type'] == 'Numeric') :
-                pd_type = 'Int64'
+                pd_type = 'Float64'
             if (row['Type'] == 'Numeric') & (row[LengthVar] <= 4):
                 pd_type = 'Int16'
             if (row['Type'] == 'Numeric') & (row[LengthVar] > 4):
@@ -273,7 +272,7 @@ def unzip_hmda_file(zip_file, raw_folder, replace=False) :
     return raw_file_name
 
 # Rename HMDA Columns
-def rename_hmda_columns(df) :
+def rename_hmda_columns(df, df_type='polars') :
     """
     Rename HMDA columns to standardize variable names.
 
@@ -308,8 +307,11 @@ def rename_hmda_columns(df) :
                          }
 
     # Rename
-    df = df.rename(columns = column_dictionary, errors='ignore')
-    
+    if df_type == 'pandas' :
+        df = df.rename(columns = column_dictionary, errors='ignore')
+    elif df_type == 'polars' :
+        df = df.rename(column_dictionary, strict=False)
+
     # Return DataFrame
     return df
 
@@ -438,7 +440,7 @@ def destring_hmda_cols_2007_2017(df) :
     return df
 
 # Destring HMDA Columns
-def destring_hmda_cols_after_2018(df) :
+def destring_hmda_cols_after_2018(lf) :
     """
     Destring numeric HMDA variables after 2018.
 
@@ -458,71 +460,50 @@ def destring_hmda_cols_after_2018(df) :
     print('Destringing HMDA Variables')
 
     # Replace Exempt w/ -99999
-    exempt_cols = ['combined_loan_to_value_ratio',
-                   'interest_rate',
-                   'rate_spread',
-                   'loan_term',
-                   'prepayment_penalty_term',
-                   'intro_rate_period',
-                   'income',
-                   'multifamily_affordable_units',
-                   'property_value',
-                   'total_loan_costs',
-                   'total_points_and_fees',
-                   'origination_charges',
-                   'discount_points',
-                   'lender_credits',
-                   ]
-    for col in exempt_cols :
-        print('Replacing exemptions for variable:', col)
-        df.loc[df[col] == "Exempt", col] = -99999
-        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+    exempt_cols = [
+        'combined_loan_to_value_ratio',
+        'interest_rate',
+        'rate_spread',
+        'loan_term',
+        'prepayment_penalty_term',
+        'intro_rate_period',
+        'income',
+        'multifamily_affordable_units',
+        'property_value',
+        'total_loan_costs',
+        'total_points_and_fees',
+        'origination_charges',
+        'discount_points',
+        'lender_credits',
+    ]
+    for exempt_col in exempt_cols :
+        lf = lf.with_columns(pl.col(exempt_col).replace("Exempt", "-99999").alias(exempt_col))
+        lf = lf.cast({exempt_col: pl.Float64}, strict=False)
 
     # Clean Units
-    col = 'total_units'
-    df.loc[df[col] == "5-24", col] = 5
-    df.loc[df[col] == "25-49", col] = 6
-    df.loc[df[col] == "50-99", col] = 7
-    df.loc[df[col] == "100-149", col] = 8
-    df.loc[df[col] == ">149", col] = 9
-    df[col] = pd.to_numeric(df[col], errors='coerce')
+    replace_column = 'total_units'
+    lf = lf.with_columns(pl.col(replace_column).replace(["5-24","25-49","50-99","100-149",">149"], [5,6,7,8,9]).alias(replace_column))
+    lf = lf.cast({replace_column: pl.Float64}, strict=False)
 
     # Clean Age
-    for col in ['applicant_age', 'co_applicant_age'] :
-        df.loc[df[col] == "<25", col] = 1
-        df.loc[df[col] == "25-34", col] = 2
-        df.loc[df[col] == "35-44", col] = 3
-        df.loc[df[col] == "45-54", col] = 4
-        df.loc[df[col] == "55-64", col] = 5
-        df.loc[df[col] == "65-74", col] = 6
-        df.loc[df[col] == ">74", col] = 7
-        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+    for replace_column in ['applicant_age', 'co_applicant_age'] :
+        lf = lf.with_columns(pl.col(replace_column).replace(["<25","25-34","35-44","45-54","55-64","65-74",">74"], [1,2,3,4,5,6,7]).alias(replace_column))
+        lf = lf.cast({replace_column: pl.Float64}, strict=False)
 
     # Clean Age Dummy Variables
-    for col in ['applicant_age_above_62', 'co_applicant_age_above_62'] :
-        df.loc[df[col].isin(["No","no","NO"]), col] = 0
-        df.loc[df[col].isin(["Yes","yes","YES"]), col] = 1
-        df.loc[df[col].isin(["Na","na","NA"]), col] = np.nan
-        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+    for replace_column in ['applicant_age_above_62', 'co_applicant_age_above_62'] :
+        lf = lf.with_columns(pl.col(replace_column).replace(["No","no","NO","Yes","yes","YES","Na","na","NA"], [0,0,0,1,1,1,None,None,None]).alias(replace_column))
+        lf = lf.cast({replace_column: pl.Float64}, strict=False)
 
 	# Clean Debt-to-Income
-    col = 'debt_to_income_ratio'
-    df.loc[df[col] == "<20%", col] = 10
-    df.loc[df[col] == "20%-<30%", col] = 20
-    df.loc[df[col] == "30%-<36%", col] = 30
-    df.loc[df[col] == "50%-60%", col] = 50
-    df.loc[df[col] == ">60%", col] = 60
-    df.loc[df[col] == "Exempt", col] = -99999
-    df[col] = pd.to_numeric(df[col], errors = 'coerce')
+    replace_column = 'debt_to_income_ratio'
+    lf = lf.with_columns(pl.col(replace_column).replace(["<20%","20%-<30%","30%-<36%","50%-60%",">60%","Exempt"], [10,20,30,50,60,-99999]).alias(replace_column))
+    lf = lf.cast({replace_column: pl.Float64}, strict=False)
 
 	# Clean Conforming Loan Limit
-    col = 'conforming_loan_limit'
-    if col in df.columns :
-        df.loc[df[col] == "NC", col] = 0
-        df.loc[df[col] == "C", col] = 1
-        df.loc[df[col] == "U", col] = 1111
-        df.loc[df[col] == "NA", col] = -1111
-        df[col] = pd.to_numeric(df[col], errors = 'coerce')
+    replace_column = 'conforming_loan_limit'
+    lf = lf.with_columns(pl.col(replace_column).replace(["NC","C","U","NA"], [0,1,1111,-1111]).alias(replace_column))
+    lf = lf.cast({replace_column: pl.Float64}, strict=False)
 
     # Numeric and Categorical Columns
     numeric_columns = [
@@ -544,13 +525,31 @@ def destring_hmda_cols_after_2018(df) :
         'co_applicant_race_3',
         'co_applicant_race_4',
         'co_applicant_race_5',
+        'applicant_ethnicity_1',
+        'applicant_ethnicity_2',
+        'applicant_ethnicity_3',
+        'applicant_ethnicity_4',
+        'applicant_ethnicity_5',
+        'co_applicant_ethnicity_1',
+        'co_applicant_ethnicity_2',
+        'co_applicant_ethnicity_3',
+        'co_applicant_ethnicity_4',
+        'co_applicant_ethnicity_5',
         'applicant_sex',
         'co_applicant_sex',
         'income',
         'purchaser_type',
+        'submission_of_application',
+        'initially_payable_to_institution',
+        'aus_1',
+        'aus_2',
+        'aus_3',
+        'aus_4',
+        'aus_5',
         'denial_reason_1',
         'denial_reason_2',
         'denial_reason_3',
+        'denial_reason_4',
         'edit_status',
         'sequence_number',
         'rate_spread',
@@ -562,14 +561,13 @@ def destring_hmda_cols_after_2018(df) :
         'tract_one_to_four_family_homes',
         'tract_median_age_of_housing_units',
     ]
-
     # Convert Columns to Numeric
     for numeric_column in numeric_columns :
-        if numeric_column in df.columns :
-            df[numeric_column] = pd.to_numeric(df[numeric_column], errors='coerce')
+        if numeric_column in lf.collect_schema().names() :
+            lf = lf.cast({numeric_column: pl.Float64}, strict=False)
 
     # Return DataFrame
-    return df
+    return lf
 
 # Rename HMDA Columns
 def split_and_save_tract_variables(df, save_folder, file_name) :
@@ -828,69 +826,6 @@ def clean_hmda_2007_2017(data_folder, temp_folder, save_folder, min_year=2007, m
                 dt = pa.Table.from_pandas(df, preserve_index=False)
                 pq.write_table(dt, save_file_parquet)
 
-# Clean Data After 2017
-def clean_hmda_post_2017(data_folder, temp_folder, save_folder, min_year=2018, max_year=2023, replace=False, save_to_stata=False, save_to_csv=True, remove_raw_file=True) :
-    """
-    Import and clean HMDA data for 2018 onward.
-
-    Parameters
-    ----------
-    data_folder : str
-        DESCRIPTION.
-    save_folder : str
-        DESCRIPTION.
-    min_year : int, optional
-        DESCRIPTION. The default is 2018.
-    max_year : int, optional
-        DESCRIPTION. The default is 2022.
-
-    Returns
-    -------
-    None.
-
-    """
-
-    # Loop Over Years
-    for year in range(min_year, max_year+1) :
-
-        # Get File Name
-        files = glob.glob(f"{data_folder}/*{year}*.parquet")
-        for file in files :
-
-            # Save File Names
-            save_file_parquet = file.replace('.parquet','_clean.parquet')
-
-            # Clean if Files are Missing
-            if (not os.path.exists(save_file_parquet)) or replace:
-
-                df = csv.read_parquet(file)
-
-                # Drop Derived Columns b/c of redundancies
-                derived_columns = ['derived_loan_product_type','derived_race','derived_ethnicity','derived_sex','derived_dwelling_category']
-                df = df.drop(columns=derived_columns, errors='ignore')
-
-                # Drop Tract Variables
-
-                # Rename HMDA Columns
-                df = rename_hmda_columns(df)
-
-                # Destring HMDA Columns
-                df = destring_hmda_cols_after_2018(df)
-
-                # Census Tract to String and Fix NAs
-                df['census_tract'] = pd.to_numeric(df['census_tract'], errors='coerce')
-                df['census_tract'] = df['census_tract'].astype('Int64')
-                df['census_tract'] = df['census_tract'].astype('str')
-                df['census_tract'] = df['census_tract'].str.zfill(11)
-                df.loc[df['census_tract'].str.contains('NA', regex=False), 'census_tract'] = ""
-
-                # Prepare for Stata
-                df = downcast_hmda_variables(df)
-
-                # Save to Parquet
-                dt = pa.Table.from_pandas(df, preserve_index=False)
-                pq.write_table(dt, save_file_parquet)
-
 # Import Data After 2017
 def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, max_year=2023, replace=False, remove_raw_file=True, block_size=100000000) :
     """
@@ -997,7 +932,7 @@ def add_hmda_indexes(data_folder, min_year=2018, max_year=2023) :
         files = glob.glob(f"{data_folder}/*{year}*.parquet")
         files = [file for file in files if '_w_index' not in file]
         for file in files :
-            lf = pl.scan_parquet(file)
+            lf = pl.scan_parquet(file, low_memory=True)#, row_index_name='HMDAIndex')
             if 'HMDAIndex' not in lf.collect_schema().names() :
                 print('Adding HMDA Index to:', file)
                 file_type = get_file_type_code(file)
@@ -1011,6 +946,88 @@ def add_hmda_indexes(data_folder, min_year=2018, max_year=2023) :
         files = glob.glob(f"{data_folder}/*{year}*_w_index.parquet")
         print(files)
         shutil.move(files[0], files[0].replace('_w_index',''))
+
+# Clean Data After 2017
+def clean_hmda_post_2017(data_folder, min_year=2018, max_year=2023, replace=False) :
+    """
+    Import and clean HMDA data for 2018 onward.
+
+    Parameters
+    ----------
+    data_folder : str
+        Folder where parquet files are stored.
+    min_year : int, optional
+        First year of data to include. The default is 2018.
+    max_year : int, optional
+        Last year of data to include. The default is 2022.
+    replace : bool, optional
+        Whether to replace existing files. The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # Loop Over Years
+    for year in range(min_year, max_year+1) :
+
+        # Get File Name
+        files = glob.glob(f"{data_folder}/*{year}*.parquet")
+        for file in files :
+
+            # Save File Names
+            save_file_parquet = file.replace('.parquet','_clean.parquet')
+
+            # Clean if Files are Missing
+            if (not os.path.exists(save_file_parquet)) or replace:
+
+                lf = pl.scan_parquet(file, low_memory=True)
+
+                # Drop Derived Columns b/c of redundancies
+                derived_columns = [
+                    'derived_loan_product_type',
+                    'derived_race',
+                    'derived_ethnicity',
+                    'derived_sex',
+                    'derived_dwelling_category',
+                ]
+                lf = lf.drop(derived_columns, strict=False)
+
+                # Drop Tract Columns
+                tract_columns = [
+                    'tract_population',
+                    'tract_minority_population_percent',
+                    'ffiec_msa_md_median_family_income',
+                    'tract_to_msa_income_percentage',
+                    'tract_owner_occupied_units',
+                    'tract_one_to_four_family_homes',
+                    'tract_median_age_of_housing_units',
+                ]
+                lf = lf.drop(tract_columns, strict=False)
+
+                # Rename HMDA Columns
+                # lf = rename_hmda_columns(lf, df_type='polars')
+
+                # Destring HMDA Columns
+                lf = destring_hmda_cols_after_2018(lf)
+
+                # Census Tract to String and Fix NAs
+                lf = lf.cast({'census_tract': pl.Float64}, strict=False)
+                lf = lf.cast({'census_tract': pl.Int64}, strict=False)
+                lf = lf.cast({'census_tract': pl.String}, strict=False)
+                lf = lf.with_columns(pl.col('census_tract').str.zfill(11).alias('census_tract'))
+
+                # Prepare for Stata
+                # df = downcast_hmda_variables(df)
+
+                # Save to Parquet
+                # dt = pa.Table.from_pandas(df, preserve_index=False)
+                # pq.write_table(dt, save_file_parquet)
+                lf.sink_parquet(save_file_parquet)
+
+                # Replace Original File
+                shutil.move(save_file_parquet, file)
 
 #%% Combine Files
 # Combine Lenders After 2018
@@ -1292,8 +1309,9 @@ if __name__ == '__main__' :
     data_folder = RAW_DIR / 'loans'
     save_folder = CLEAN_DIR / 'loans'
     schema_file='./schemas/hmda_lar_schema_post2018.html'
-    # import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, max_year=2023)
+    # import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2018, max_year=2023)
     # add_hmda_indexes(save_folder, min_year=2018, max_year=2023)
+    clean_hmda_post_2017(save_folder, min_year=2021, max_year=2021, replace=False)
 
     # Import HMDA Transmittal Series Data
     data_folder = RAW_DIR / 'transmissal_series'

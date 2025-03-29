@@ -78,3 +78,61 @@ def get_hmda_files(data_folder=DATA_DIR, file_type='lar', min_year=None, max_yea
 
     # Return File List
     return files
+
+# Load HMDA Files
+def load_hmda_file(
+    data_folder=DATA_DIR,
+    file_type='lar',
+    min_year=2018,
+    max_year=2023,
+    extension='parquet',
+    columns=None,
+    filters=None,
+    verbose=False,
+    **kwargs,
+) -> pd.DataFrame :
+    """
+    Load HMDA files.
+
+    Parameters
+    ----------
+    data_folder : str
+        The folder where the HMDA files are stored.
+    file_type : str, optional
+        The type of HMDA file to load. The default is 'lar'.
+    min_year : int, optional
+            The first year of HMDA files to load. The default is 2018.
+    max_year : int, optional
+            The last year of HMDA files to load. The default is 2023.
+    extension : str, optional
+            The file extension of HMDA files to load. The default is 'parquet'.
+    columns : list, optional
+        The columns to load. The default is None.
+    filters : list, optional
+        The filters to apply. The default is None.
+    verbose : bool, optional
+        Whether to print progress messages. The default is False.
+    **kwargs : optional
+        Additional arguments to pass to pd.read_parquet.
+        
+    Returns
+    -------
+    df : DataFrame
+        The loaded HMDA file.
+
+    """
+    
+    # Get HMDA Files
+    files = get_hmda_files(data_folder=data_folder, file_type=file_type, min_year=min_year, max_year=max_year, extension=extension)
+
+    # Load File
+    df = []
+    for file in files :
+        if verbose :
+            print('Adding data from file:', file)
+        df_a = pd.read_parquet(file, columns=columns, filters=filters, **kwargs)
+        df.append(df_a)
+    df = pd.concat(df)
+
+    # Return DataFrame
+    return df
