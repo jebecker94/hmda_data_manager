@@ -76,8 +76,8 @@ def get_file_schema(schema_file, schema_type='pyarrow') :
     """
 
     # Check Schema Type
-    if schema_type not in ['pyarrow','pandas'] :
-        raise ValueError('The schema type must be either "pyarrow" or "pandas".')
+    if schema_type not in ['pyarrow','pandas','polars'] :
+        raise ValueError('The schema type must be either "pyarrow" or "pandas" or "polars".')
 
     # Load the schema file
     df = pd.read_html(schema_file)[0]
@@ -121,6 +121,22 @@ def get_file_schema(schema_file, schema_type='pyarrow') :
             if (row['Type'] == 'Numeric') & (row[LengthVar] > 9):
                 pd_type = 'Int64'
             schema[row[FieldVar]] = pd_type
+
+    # Convert the schema to a Polars schema (In progress)
+    elif schema_type == 'polars' :
+        schema = {}
+        for _,row in df.iterrows() :
+            pd_type = pl.String()
+            if (row['Type'] == 'Numeric') :
+                pd_type = pl.Float64()
+            if (row['Type'] == 'Numeric') & (row[LengthVar] <= 4):
+                pd_type = pl.Int16()
+            if (row['Type'] == 'Numeric') & (row[LengthVar] > 4):
+                pd_type = pl.Int32()
+            if (row['Type'] == 'Numeric') & (row[LengthVar] > 9):
+                pd_type = pl.Int64()
+            schema[row[FieldVar]] = pd_type
+        schema = pl.Schema(schema)
 
     # Return the schema
     return schema
@@ -166,51 +182,6 @@ def replace_csv_column_names(csv_file, column_name_mapper={}) :
     lines[0] = new_first_line+'\n'
     with open(csv_file, 'w') as f:
         f.writelines(lines)
-
-# Unzip HMDA Data
-def unzip_hmda_data(data_folder, save_folder, replace=False, file_string='lar') :
-    """
-    Unzip zipped HMDA archives.
-
-    Parameters
-    ----------
-    data_folder : str
-        Folder where zip files are stored.
-    save_folder : str
-        Folder where unzipped files will be saved.
-    replace : bool, optional
-        Whether to replace unzipped files if they already exist. The default is False.
-    file_string : str, optional
-        File substring to search for when filtering. The default is 'lar'.
-
-    Returns
-    -------
-    None.
-
-    """
-
-    # Get HMDA Zip Files and keep files with desired string pattern
-    zip_files = glob.glob(f'{data_folder}/*.zip')
-    zip_files = [x for x in zip_files if file_string.lower() in os.path.basename(x).lower()]
-    for zip_file in zip_files :
-
-        with zipfile.ZipFile(zip_file) as z :
-
-            for file in z.namelist() :
-
-                # Unzip if New File Doesn't Exist or Replace Option is On
-                new_file_name = f'{save_folder}/{file}'
-                if (not os.path.exists(new_file_name)) or replace :
-
-                    # Extract and Create Temporary File
-                    print('Extracting File:', file)
-                    try :
-                        z.extract(file, path = save_folder)
-                    except :
-                        print('Could not unzip file:', file, 'with Pythons Zipfile package. Using 7z instead.')
-                        unzip_string = "C:/Program Files/7-Zip/7z.exe"
-                        p = subprocess.Popen([unzip_string, "e", f"{zip_file}", f"-o{save_folder}", f"{file}", "-y"])
-                        p.wait()
 
 # Unzip HMDA Data
 def unzip_hmda_file(zip_file, raw_folder, replace=False) :
@@ -278,33 +249,34 @@ def rename_hmda_columns(df, df_type='polars') :
 
     Parameters
     ----------
-    df : TYPE
-        DESCRIPTION.
+    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
+        DataFrame to rename columns in.
 
     Returns
     -------
-    df : TYPE
-        DESCRIPTION.
+    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
+        DataFrame with renamed columns.
 
     """
     
     # Column Name Dictionary
-    column_dictionary = {'occupancy': 'occupancy_type',
-                         'as_of_year': 'activity_year',
-                         'owner_occupancy': 'occupancy_type',
-                         'loan_amount_000s': 'loan_amount',
-                         'census_tract_number': 'census_tract',
-                         'applicant_income_000s': 'income',
-                         'derived_msa-md': 'msa_md',
-                         'derived_msa_md': 'msa_md',
-                         'msamd': 'msa_md',
-                         'population': 'tract_population',
-                         'minority_population': 'tract_minority_population_percent',
-                         'hud_median_family_income': 'ffiec_msa_md_median_family_income',
-                         'tract_to_msamd_income': 'tract_to_msa_income_percentage',
-                         'number_of_owner_occupied_units': 'tract_owner_occupied_units',
-                         'number_of_1_to_4_family_units': 'tract_one_to_four_family_homes',
-                         }
+    column_dictionary = {
+        'occupancy': 'occupancy_type',
+        'as_of_year': 'activity_year',
+        'owner_occupancy': 'occupancy_type',
+        'loan_amount_000s': 'loan_amount',
+        'census_tract_number': 'census_tract',
+        'applicant_income_000s': 'income',
+        'derived_msa-md': 'msa_md',
+        'derived_msa_md': 'msa_md',
+        'msamd': 'msa_md',
+        'population': 'tract_population',
+        'minority_population': 'tract_minority_population_percent',
+        'hud_median_family_income': 'ffiec_msa_md_median_family_income',
+        'tract_to_msamd_income': 'tract_to_msa_income_percentage',
+        'number_of_owner_occupied_units': 'tract_owner_occupied_units',
+        'number_of_1_to_4_family_units': 'tract_one_to_four_family_homes',
+    }
 
     # Rename
     if df_type == 'pandas' :
@@ -369,13 +341,13 @@ def destring_hmda_cols_2007_2017(df) :
 
     Parameters
     ----------
-    df : pandas DataFrame
-        .
+    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
+        DataFrame to destring.
 
     Returns
     -------
-    df : pandas DataFrame
-        .
+    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
+        DataFrame with destringed columns.
 
     """
 
@@ -395,46 +367,47 @@ def destring_hmda_cols_2007_2017(df) :
     df['census_tract'] = df['census_tract'].astype('Int64')
     
     # Numeric and Categorical Columns
-    numeric_columns = ['activity_year',
-                       'loan_type',
-                       'loan_purpose',
-                       'occupancy_type',
-                       'loan_amount',
-                       'action_taken',
-                       'msa_md',
-                       'applicant_race_1',
-                       'applicant_race_2',
-                       'applicant_race_3',
-                       'applicant_race_4',
-                       'applicant_race_5',
-                       'co_applicant_race_1',
-                       'co_applicant_race_2',
-                       'co_applicant_race_3',
-                       'co_applicant_race_4',
-                       'co_applicant_race_5',
-                       'applicant_sex',
-                       'co_applicant_sex',
-                       'income',
-                       'purchaser_type',
-                       'denial_reason_1',
-                       'denial_reason_2',
-                       'denial_reason_3',
-                       'edit_status',
-                       'sequence_number',
-                       'rate_spread',
-                       'tract_population',
-                       'tract_minority_population_percent',
-                       'ffiec_msa_md_median_family_income',
-                       'tract_to_msa_income_percentage',
-                       'tract_owner_occupied_units',
-                       'tract_one_to_four_family_homes',
-                       'tract_median_age_of_housing_units',
-                       ]
+    numeric_columns = [
+        'activity_year',
+        'loan_type',
+        'loan_purpose',
+        'occupancy_type',
+        'loan_amount',
+        'action_taken',
+        'msa_md',
+        'applicant_race_1',
+        'applicant_race_2',
+        'applicant_race_3',
+        'applicant_race_4',
+        'applicant_race_5',
+        'co_applicant_race_1',
+        'co_applicant_race_2',
+        'co_applicant_race_3',
+        'co_applicant_race_4',
+        'co_applicant_race_5',
+        'applicant_sex',
+        'co_applicant_sex',
+        'income',
+        'purchaser_type',
+        'denial_reason_1',
+        'denial_reason_2',
+        'denial_reason_3',
+        'edit_status',
+        'sequence_number',
+        'rate_spread',
+        'tract_population',
+        'tract_minority_population_percent',
+        'ffiec_msa_md_median_family_income',
+        'tract_to_msa_income_percentage',
+        'tract_owner_occupied_units',
+        'tract_one_to_four_family_homes',
+        'tract_median_age_of_housing_units',
+    ]
 
     # Convert Columns to Numeric
     for numeric_column in numeric_columns :
         if numeric_column in df.columns :
-            df[numeric_column] = pd.to_numeric(df[numeric_column], errors = 'coerce')
+            df[numeric_column] = pd.to_numeric(df[numeric_column], errors='coerce')
 
     # Return DataFrame
     return df
@@ -507,7 +480,6 @@ def destring_hmda_cols_after_2018(lf) :
 
     # Numeric and Categorical Columns
     numeric_columns = [
-        'activity_year',
         'loan_type',
         'loan_purpose',
         'occupancy_type',
@@ -572,52 +544,71 @@ def destring_hmda_cols_after_2018(lf) :
 # Rename HMDA Columns
 def split_and_save_tract_variables(df, save_folder, file_name) :
     """
-    Create and save cesnsus tract data.
+    Split and save tract variables from the HMDA data frame.
 
     Parameters
     ----------
-    df : TYPE
-        DESCRIPTION.
-    save_folder : TYPE
-        DESCRIPTION.
-    file_name : TYPE
-        DESCRIPTION.
+    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
+        Data with tract variables.
+    save_folder : str
+        Folder to save the tract variables.
+    file_name : str
+        File name to save the tract variables.
 
     Returns
     -------
-    df : TYPE
-        DESCRIPTION.
+    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
+        Data frame without the tract variables.
 
     """
+
+    # Check DataFrame Type
+    if not isinstance(df, [pd.DataFrame, pl.DataFrame, pl.LazyFrame]) :
+        raise ValueError('The input dataframe must be a pandas DataFrame, polars lazyframe, or polars dataframe.')
     
     # Column Name Dictionary
-    tract_variables = ['tract_population',
-                       'tract_minority_population_percent',
-                       'ffiec_msa_md_median_family_income',
-                       'tract_to_msa_income_percentage',
-                       'tract_owner_occupied_units',
-                       'tract_one_to_four_family_homes',
-                       'tract_median_age_of_housing_units',
-                       ]
+    tract_variables = [
+        'tract_population',
+        'tract_minority_population_percent',
+        'ffiec_msa_md_median_family_income',
+        'tract_to_msa_income_percentage',
+        'tract_owner_occupied_units',
+        'tract_one_to_four_family_homes',
+        'tract_median_age_of_housing_units',
+    ]
     tract_variables = [x for x in tract_variables if x in df.columns]
 
-    # Convert Columns to Numeric
-    for tract_variable in tract_variables :
-        if tract_variable in df.columns :
-            df[tract_variable] = pd.to_numeric(df[tract_variable], errors = 'coerce')
+    # Pandas Implementation
+    if isinstance(df, pd.DataFrame) :
+        # Convert Columns to Numeric
+        for tract_variable in tract_variables :
+            df[tract_variable] = pd.to_numeric(df[tract_variable], errors='coerce')
 
-    # Separate and DropExisting Tract Variables
-    if tract_variables :
-        
-        # Separate Tract Variables
-        df_tract = df[['activity_year','census_tract']+tract_variables].drop_duplicates()
-        df_tract.to_csv(f'{save_folder}/tract_variables/tract_vars_{file_name}.csv',
-                        index=False,
-                        sep='|',
-                        )
-        
-        # Drop Tract Variables and Return DataFrame
-        df = df.drop(columns = tract_variables)
+        # Separate and DropExisting Tract Variables
+        if tract_variables :
+            
+            # Separate Tract Variables
+            df_tract = df[['activity_year','census_tract']+tract_variables].drop_duplicates()
+            df_tract.to_parquet(f'{save_folder}/tract_variables/tract_vars_{file_name}.parquet', index=False)
+            
+            # Drop Tract Variables and Return DataFrame
+            df = df.drop(columns=tract_variables)
+
+    # Polars Implementation
+    elif isinstance(df, pl.DataFrame) | isinstance(df, pl.LazyFrame) :
+        # Convert Columns to Numeric
+        for tract_variable in tract_variables :
+            df = df.with_columns(pl.col(tract_variable).cast(pl.Float64))
+
+        # Separate and Drop Existing Tract Variables
+        if tract_variables :
+            
+            # Separate Tract Variables
+            df_tract = df.select(['activity_year','census_tract']+tract_variables).drop_duplicates()
+            df_tract.write_parquet(f'{save_folder}/tract_variables/tract_vars_{file_name}.parquet')
+            
+            # Drop Tract Variables and Return DataFrame
+            df = df.drop(tract_variables)
 
     # Return DataFrame
     return df
@@ -651,56 +642,6 @@ def downcast_hmda_variables(df) :
 
     # Return DataFrame and Labels
     return df
-
-# Prepare for Stata
-def prepare_hmda_for_stata(df) :
-    """
-    Create variable and value labels to save DTA files for stata.
-
-    Parameters
-    ----------
-    df : pandas DataFrame
-        DESCRIPTION.
-
-    Returns
-    -------
-    df : pandas DataFrame
-        DESCRIPTION.
-    variable_labels : dictionary
-        DESCRIPTION.
-    value_labels : dictionary
-        DESCRIPTION.
-
-    """
-
-    # Read Value Labels
-    value_label_file = RAW_DIR / "loans/hmda_value_labels.txt"
-    with open(value_label_file, 'r') as f :
-        value_labels = ast.literal_eval(f.read())
-
-    # Read Variable Labels
-    variable_label_file = RAW_DIR / "loans/hmda_variable_labels.txt"
-    with open(variable_label_file, 'r') as f :
-        variable_labels = ast.literal_eval(f.read())
-
-    # Trim Value and Variable Labels
-    variable_labels = {key[0:32].replace('-','_'):value[0:80] for key,value in variable_labels.items() if key in df.columns}
-    value_labels = {key[0:32].replace('-','_'):value for key,value in value_labels.items() if key in df.columns}
-    df.columns = [x[0:32].replace('-','_') for x in df.columns]
-
-    # Downcast Numeric Types
-    vl = [key for key,value in value_labels.items()]
-    for col in vl+['activity_year'] :
-        try :
-            df[col] = df[col].astype('Int16')
-        except (TypeError, OverflowError) :
-            print('Cannot downcast variable:', col)
-    for col in ['msa_md', 'county_code', 'sequence_number'] :
-        if col in df.columns :
-            df[col] = df[col].astype('Int32')
-
-    # Return DataFrame and Labels
-    return df, variable_labels, value_labels
 
 #%% Import Functions
 # Import Historic HMDA Files (Still Needs Work)
@@ -759,88 +700,34 @@ def import_hmda_pre_2007(data_folder, save_folder, min_year=1981, max_year=2006,
                 if save_to_parquet :   
                     pq.write_table(dt, save_file_parquet)
 
-# Clean Historic HMDA Files (2007-2017)
-def clean_hmda_2007_2017(data_folder, temp_folder, save_folder, min_year=2007, max_year=2017, save_to_stata=False, save_to_csv=True, remove_raw_file=True) :
+# Import Data w/ Streaming
+def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, max_year=2023, replace=False, remove_raw_file=True, add_hmda_index=True) :
     """
-    Import and clean HMDA data for 2007-2017.
-
-    Parameters
-    ----------
-    data_folder : TYPE
-        DESCRIPTION.
-    save_folder : TYPE
-        DESCRIPTION.
-    min_year : TYPE, optional
-        DESCRIPTION. The default is 2007.
-    max_year : TYPE, optional
-        DESCRIPTION. The default is 2017.
-
-    Returns
-    -------
-    None.
-
-    """
-
-    # Loop Over Years
-    for year in range(min_year, max_year+1) :
-
-        # Get File Name
-        files = glob.glob(f"{data_folder}/*{year}*records*.parquet") + glob.glob(f"{data_folder}/*{year}*public*.parquet")
-        for file in files :
-
-            # Save File Names
-            save_file_parquet = file.replace('.parquet','_clean.parquet')
-
-            # Clean if Files are Missing
-            if (not os.path.exists(save_file_parquet)) or replace:
-
-                df = csv.read_parquet(file)
-
-                # Rename HMDA Columns
-                df = rename_hmda_columns(df)
-
-                # Create Unique HMDA Index
-                if year == 2017 :
-                    file_type = get_file_type_code(file)
-                    df['HMDAIndex'] = range(df.shape[0])
-                    df['HMDAIndex'] = df['HMDAIndex'].astype('str').str.zfill(9)
-                    df['HMDAIndex'] = df['activity_year'].astype('str') + file_type + '_' + df['HMDAIndex']
-
-                # Drop Derived Columns b/c of redundancies
-                derived_columns = ['derived_loan_product_type','derived_race','derived_ethnicity','derived_sex','derived_dwelling_category']
-                df = df.drop(columns = derived_columns, errors='ignore')
-
-                # Drop Tract Variables
-
-                # Destring HMDA Columns
-                df = destring_hmda_cols_2007_2017(df)
-                
-                # Census Tract to String and Fix NAs
-                df['census_tract'] = pd.to_numeric(df['census_tract'], errors='coerce')
-                df['census_tract'] = df['census_tract'].astype('Int64')
-                df['census_tract'] = df['census_tract'].astype('str')
-                df['census_tract'] = df['census_tract'].str.zfill(11)
-                df.loc[df['census_tract'].str.contains('NA', regex=False), 'census_tract'] = ""
-
-                # Save to Parquet
-                dt = pa.Table.from_pandas(df, preserve_index=False)
-                pq.write_table(dt, save_file_parquet)
-
-# Import Data After 2017
-def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, max_year=2023, replace=False, remove_raw_file=True, block_size=100000000) :
-    """
-    Import and clean HMDA data for 2018 onward.
+    Import and clean HMDA data for 2007 onward.
+    
+    Also adds HMDAIndex to HMDA files from 2018 onward. The HMDAIndex is a unique identifier
+    for each loan application record consisting of:
+    - Activity year (4 digits)  
+    - File type code (1 character)
+    - Row number (9 digits, zero padded)
+    For example: 2018a_000000000
 
     Parameters
     ----------
     data_folder : str
-        DESCRIPTION.
+        Folder where raw data is stored.
     save_folder : str
-        DESCRIPTION.
+        Folder where cleaned data will be saved.
     min_year : int, optional
-        DESCRIPTION. The default is 2018.
+        First year of data to include. The default is 2007.
     max_year : int, optional
-        DESCRIPTION. The default is 2022.
+        Last year of data to include. The default is 2023.
+    replace : bool, optional
+        Whether to replace existing files. The default is False.
+    remove_raw_file : bool, optional
+        Whether to remove the raw file after processing. The default is True.
+    add_hmda_index : bool, optional
+        Whether to add the HMDAIndex to the data starting in 2017. The default is True.
 
     Returns
     -------
@@ -872,80 +759,34 @@ def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, 
                 # Setup Read and Write Options
                 raw_file = unzip_hmda_file(file, data_folder)
                 delimiter = get_delimiter(raw_file, bytes=16000)
-                schema = get_file_schema(schema_file=schema_file)
+                schema = get_file_schema(schema_file=schema_file, schema_type='polars')
 
                 # Limit Schema to Cols in CSV
                 csv_columns = pd.read_csv(raw_file, nrows=0, sep=delimiter).columns
-                if year <= 2017 :
-                    schema = pa.schema([(name, dtype) for name, dtype in zip(csv_columns, schema.types)])
+                # if year <= 2017 :
+                    # # Check size compatibility
+                    # schema = pa.schema([(name, dtype) for name, dtype in zip(csv_columns, schema.types)])
                 if year >= 2018 :
-                    schema = pa.schema([(name, dtype) for name, dtype in zip(schema.names, schema.types) if name in csv_columns])
+                    # Add functionality to limit to only csv columns
+                    pass
 
-                # Set Read Options
-                convert_options = csv.ConvertOptions(column_types=schema)
-                parse_options = csv.ParseOptions(delimiter=delimiter)
-                read_options = csv.ReadOptions(block_size=block_size)
+                # Read HMDA Data (Adding HMDA Index After 2017)
+                if (year < 2017) | (add_hmda_index==False) :
+                    lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema)
+                else :
+                    lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema, row_index_name='HMDAIndex')
+                    file_type = get_file_type_code(file)
+                    lf = lf.cast({'HMDAIndex': pl.String}, strict=False)
+                    lf = lf.with_columns(pl.col('HMDAIndex').str.zfill(9).alias('HMDAIndex'))
+                    lf = lf.with_columns((str(year)+file_type+'_'+pl.col('HMDAIndex')).alias('HMDAIndex'))
 
-                # Read CSV and Write to Parquet
-                with open(raw_file, "rb") as f :
-                    reader = csv.open_csv(f,
-                                        convert_options=convert_options,
-                                        parse_options=parse_options,
-                                        read_options=read_options)
-                    writer = pq.ParquetWriter(save_file, schema=schema)
-                    try:
-                        while True:
-                            batch = reader.read_next_batch()
-                            writer.write_batch(batch)
-                    except StopIteration :
-                        pass
-                    reader.close()
-                    writer.close()
+                # Save as Parquet (Streaming)
+                lf.sink_parquet(save_file)
 
                 # Remove the Temporary Raw File
                 if remove_raw_file :
                     time.sleep(1)
                     os.remove(raw_file)
-
-# Add HMDAIndex to HMDA Files
-def add_hmda_indexes(data_folder, min_year=2018, max_year=2023) :
-    """
-    Add HMDA Indexes to HMDA data.
-
-    Parameters
-    ----------
-    data_folder : str
-        Folder where data is stored.
-    min_year : int, optional
-        First year of data to add HMDAIndex to. The default is 2018.
-    max_year : int, optional
-        Last year of data to add HMDAIndex to. The default is 2023.
-    
-    Returns
-    -------
-    None.
-
-    """
-
-    # Get Files
-    for year in range(min_year, max_year+1) :
-        files = glob.glob(f"{data_folder}/*{year}*.parquet")
-        files = [file for file in files if '_w_index' not in file]
-        for file in files :
-            lf = pl.scan_parquet(file, low_memory=True)#, row_index_name='HMDAIndex')
-            if 'HMDAIndex' not in lf.collect_schema().names() :
-                print('Adding HMDA Index to:', file)
-                file_type = get_file_type_code(file)
-                HMDAIndex = range(lf.select(pl.len()).collect().item())
-                HMDAIndex = [str(year)+file_type+'_'+str(x).zfill(9) for x in HMDAIndex]
-                lf = lf.with_columns(pl.Series(HMDAIndex).alias("HMDAIndex"))
-                lf.sink_parquet(file.replace('.parquet','_w_index.parquet'))
-
-    # Rename Files w/ Indices
-    for year in range(min_year, max_year+1) :
-        files = glob.glob(f"{data_folder}/*{year}*_w_index.parquet")
-        print(files)
-        shutil.move(files[0], files[0].replace('_w_index',''))
 
 # Clean Data After 2017
 def clean_hmda_post_2017(data_folder, min_year=2018, max_year=2023, replace=False) :
@@ -1028,6 +869,73 @@ def clean_hmda_post_2017(data_folder, min_year=2018, max_year=2023, replace=Fals
 
                 # Replace Original File
                 shutil.move(save_file_parquet, file)
+
+# Clean Historic HMDA Files (2007-2017)
+def clean_hmda_2007_2017(data_folder, min_year=2007, max_year=2017, replace=False) :
+    """
+    Import and clean HMDA data for 2007-2017.
+
+    Parameters
+    ----------
+    data_folder : TYPE
+        DESCRIPTION.
+    save_folder : TYPE
+        DESCRIPTION.
+    min_year : TYPE, optional
+        DESCRIPTION. The default is 2007.
+    max_year : TYPE, optional
+        DESCRIPTION. The default is 2017.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # Loop Over Years
+    for year in range(min_year, max_year+1) :
+
+        # Get File Name
+        files = glob.glob(f"{data_folder}/*{year}*records*.parquet") + glob.glob(f"{data_folder}/*{year}*public*.parquet")
+        for file in files :
+
+            # Save File Names
+            save_file_parquet = file.replace('.parquet','_clean.parquet')
+
+            # Clean if Files are Missing
+            if (not os.path.exists(save_file_parquet)) or replace:
+
+                df = csv.read_parquet(file)
+
+                # Rename HMDA Columns
+                df = rename_hmda_columns(df)
+
+                # Create Unique HMDA Index
+                if year == 2017 :
+                    file_type = get_file_type_code(file)
+                    df['HMDAIndex'] = range(df.shape[0])
+                    df['HMDAIndex'] = df['HMDAIndex'].astype('str').str.zfill(9)
+                    df['HMDAIndex'] = df['activity_year'].astype('str') + file_type + '_' + df['HMDAIndex']
+
+                # Drop Derived Columns b/c of redundancies
+                derived_columns = ['derived_loan_product_type','derived_race','derived_ethnicity','derived_sex','derived_dwelling_category']
+                df = df.drop(columns = derived_columns, errors='ignore')
+
+                # Drop Tract Variables
+
+                # Destring HMDA Columns
+                df = destring_hmda_cols_2007_2017(df)
+                
+                # Census Tract to String and Fix NAs
+                df['census_tract'] = pd.to_numeric(df['census_tract'], errors='coerce')
+                df['census_tract'] = df['census_tract'].astype('Int64')
+                df['census_tract'] = df['census_tract'].astype('str')
+                df['census_tract'] = df['census_tract'].str.zfill(11)
+                df.loc[df['census_tract'].str.contains('NA', regex=False), 'census_tract'] = ""
+
+                # Save to Parquet
+                dt = pa.Table.from_pandas(df, preserve_index=False)
+                pq.write_table(dt, save_file_parquet)
 
 #%% Combine Files
 # Combine Lenders After 2018
@@ -1178,17 +1086,6 @@ def combine_lenders_panel_ts_pre2018(panel_folder, ts_folder, save_folder, min_y
               )
 
 #%% File Management
-# Save to Stata
-def save_file_to_stata(file) :
-    df = pd.read_parquet(file)
-    df, variable_labels, value_labels = prepare_hmda_for_stata(df)
-    save_file_dta = file.replace('.parquet','.dta')
-    df.to_stata(save_file_dta,
-                write_index=False,
-                variable_labels=variable_labels,
-                value_labels=value_labels,
-                )
-
 # Extract Year From FileNames
 def extract_years_from_strings(strings) :
     years = []
@@ -1310,8 +1207,7 @@ if __name__ == '__main__' :
     save_folder = CLEAN_DIR / 'loans'
     schema_file='./schemas/hmda_lar_schema_post2018.html'
     # import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2018, max_year=2023)
-    # add_hmda_indexes(save_folder, min_year=2018, max_year=2023)
-    clean_hmda_post_2017(save_folder, min_year=2021, max_year=2021, replace=False)
+    # clean_hmda_post_2017(save_folder, min_year=2018, max_year=2023, replace=False)
 
     # Import HMDA Transmittal Series Data
     data_folder = RAW_DIR / 'transmissal_series'
@@ -1334,6 +1230,6 @@ if __name__ == '__main__' :
 
     # Update File List
     data_folder = CLEAN_DIR
-    update_file_list(data_folder)
+    # update_file_list(data_folder)
 
 #%%
