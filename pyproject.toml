@@ -10,5 +10,6 @@ dependencies = [
     "polars>=1.26.0",
     "pyod>=2.0.4",
     "python-decouple>=3.8",
+    "ruff>=0.11.3",
     "scipy>=1.15.2",
 ]

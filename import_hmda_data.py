@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on: Sat Dec 3 09:49:44 2022
-Last updated on: Thu Mar 14 08:06:38 2024
+Created on: Saturday December 3, 2022
+Last updated on: Sunday March 30, 2025
 @author: Jonathan E. Becker
 """
 
 # Import Packages
 import io
-import ast
 import os
 import glob
 import zipfile
@@ -25,7 +24,7 @@ import time
 import polars as pl
 import shutil
 
-#%% Local Functions
+#%% Support Functions
 # Get Delimiter
 def get_delimiter(file_path, bytes=4096) :
     """
@@ -763,6 +762,7 @@ def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, 
 
                 # Limit Schema to Cols in CSV
                 csv_columns = pd.read_csv(raw_file, nrows=0, sep=delimiter).columns
+                print(csv_columns)
                 # if year <= 2017 :
                     # # Check size compatibility
                     # schema = pa.schema([(name, dtype) for name, dtype in zip(csv_columns, schema.types)])
@@ -774,7 +774,8 @@ def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, 
                 if (year < 2017) | (add_hmda_index==False) :
                     lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema)
                 else :
-                    lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema, row_index_name='HMDAIndex')
+                    # lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema, row_index_name='HMDAIndex', infer_schema_length=None)
+                    lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, row_index_name='HMDAIndex', infer_schema_length=None)
                     file_type = get_file_type_code(file)
                     lf = lf.cast({'HMDAIndex': pl.String}, strict=False)
                     lf = lf.with_columns(pl.col('HMDAIndex').str.zfill(9).alias('HMDAIndex'))
@@ -1206,7 +1207,7 @@ if __name__ == '__main__' :
     data_folder = RAW_DIR / 'loans'
     save_folder = CLEAN_DIR / 'loans'
     schema_file='./schemas/hmda_lar_schema_post2018.html'
-    # import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2018, max_year=2023)
+    import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2024, max_year=2024)
     # clean_hmda_post_2017(save_folder, min_year=2018, max_year=2023, replace=False)
 
     # Import HMDA Transmittal Series Data
