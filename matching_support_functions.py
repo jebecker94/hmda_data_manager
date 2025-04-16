@@ -4,7 +4,6 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import HMDALoader
-import config
 
 # Get Match Columns
 def get_match_columns(file) :

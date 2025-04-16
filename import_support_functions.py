@@ -1,20 +1,13 @@
 # Import Packages
 import io
 import os
-import glob
 import zipfile
 import pandas as pd
 import numpy as np
 import subprocess
-from pyarrow import csv
 import pyarrow as pa
-import pyarrow.parquet as pq
 from csv import Sniffer
-import re
-import config
-import time
 import polars as pl
-import shutil
 
 # Get Delimiter
 def get_delimiter(file_path, bytes=4096) :
