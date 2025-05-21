@@ -155,7 +155,7 @@ def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, 
                 else :
                     # lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema, row_index_name='HMDAIndex', infer_schema_length=None)
                     lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, row_index_name='HMDAIndex', infer_schema_length=None)
-                    file_type = get_file_type_code(file)
+                    file_type = HMDALoader.get_file_type_code(file)
                     lf = lf.cast({'HMDAIndex': pl.String}, strict=False)
                     lf = lf.with_columns(pl.col('HMDAIndex').str.zfill(9).alias('HMDAIndex'))
                     lf = lf.with_columns((str(year)+file_type+'_'+pl.col('HMDAIndex')).alias('HMDAIndex'))
@@ -292,7 +292,7 @@ def clean_hmda_2007_2017(data_folder, min_year=2007, max_year=2017, replace=Fals
 
                 # Create Unique HMDA Index
                 if year == 2017 :
-                    file_type = get_file_type_code(file)
+                    file_type = HMDALoader.get_file_type_code(file)
                     df['HMDAIndex'] = range(df.shape[0])
                     df['HMDAIndex'] = df['HMDAIndex'].astype('str').str.zfill(9)
                     df['HMDAIndex'] = df['activity_year'].astype('str') + file_type + '_' + df['HMDAIndex']
