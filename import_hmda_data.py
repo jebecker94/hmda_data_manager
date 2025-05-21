@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on: Saturday December 3, 2022
-Last updated on: Sunday March 30, 2025
+Last updated on: Wednesday May 21, 2025
 @author: Jonathan E. Becker
 """
 
@@ -478,7 +478,7 @@ if __name__ == '__main__' :
     data_folder = RAW_DIR / 'loans'
     save_folder = CLEAN_DIR / 'loans'
     schema_file='./schemas/hmda_lar_schema_post2018.html'
-    import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2024, max_year=2024)
+    import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2018, max_year=2023)
     # clean_hmda_post_2017(save_folder, min_year=2018, max_year=2023, replace=False)
 
     # Import HMDA Transmittal Series Data
