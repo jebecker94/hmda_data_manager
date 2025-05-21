@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jul 19 10:20:24 2024
-@author: jebecker3
+Created on Friday Jul 19 10:20:24 2024
+Updated On: Wednesday May 21 10:00:00 2025
+@author: Jonathan E. Becker
 """
 
 # Import Packages
 import pandas as pd
+import polars as pl
+import pyarrow as pa
+import pyarrow.parquet as pq
 import config
+from typing import Union
 
 # Set Folder Paths
 DATA_DIR = config.DATA_DIR
@@ -85,14 +90,16 @@ def load_hmda_file(
     file_type='lar',
     min_year=2018,
     max_year=2023,
-    extension='parquet',
     columns=None,
     filters=None,
     verbose=False,
+    engine='pandas',
     **kwargs,
-) -> pd.DataFrame :
+) -> Union[pd.DataFrame, pl.LazyFrame, pl.DataFrame, pa.Table] :
     """
     Load HMDA files.
+
+    Note that in orrder to load files efficiently, we use only parquet formats. Other formats are not supported at this time, but may be implemented later.
 
     Parameters
     ----------
@@ -104,14 +111,14 @@ def load_hmda_file(
             The first year of HMDA files to load. The default is 2018.
     max_year : int, optional
             The last year of HMDA files to load. The default is 2023.
-    extension : str, optional
-            The file extension of HMDA files to load. The default is 'parquet'.
     columns : list, optional
         The columns to load. The default is None.
     filters : list, optional
         The filters to apply. The default is None.
     verbose : bool, optional
         Whether to print progress messages. The default is False.
+    engine : str, optional
+        The engine to use for loading the data, either 'pandas', 'polars', or 'pyarrow'. The default is 'pandas'.
     **kwargs : optional
         Additional arguments to pass to pd.read_parquet.
         
@@ -123,16 +130,33 @@ def load_hmda_file(
     """
     
     # Get HMDA Files
-    files = get_hmda_files(data_folder=data_folder, file_type=file_type, min_year=min_year, max_year=max_year, extension=extension)
+    files = get_hmda_files(data_folder=data_folder, file_type=file_type, min_year=min_year, max_year=max_year, extension='parquet')
 
     # Load File
     df = []
-    for file in files :
-        if verbose :
-            print('Adding data from file:', file)
-        df_a = pd.read_parquet(file, columns=columns, filters=filters, **kwargs)
-        df.append(df_a)
-    df = pd.concat(df)
+    if engine=='pandas':
+        for file in files :
+            if verbose :
+                print('Adding data from file:', file)
+            df_a = pd.read_parquet(file, columns=columns, filters=filters, **kwargs) # Note: Filters must be passed in pyarrow/pandas format
+            df.append(df_a)
+        df = pd.concat(df)
+    if engine=='pyarrow':
+        for file in files :
+            if verbose :
+                print('Adding data from file:', file)
+            df_a = pq.read_table(file, columns=columns, filters=filters, **kwargs) # Note: Filters must be passed in pyarrow/pandas format
+            df.append(df_a)
+        df = pa.concat_tables(df)
+    if engine=='polars':
+        for file in files :
+            if verbose :
+                print('Adding data from file:', file)
+            df_a = pl.scan_parquet(file, **kwargs) # Note: We'll default to lazy loading when using polars
+            df_a = df_a.select(columns)
+            df_a = df_a.filter(filters) # Note: Filters must be passed in polars format
+            df.append(df_a)
+        df = pl.concat(df)
 
     # Return DataFrame
     return df
