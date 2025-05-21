@@ -134,7 +134,7 @@ if __name__ == "__main__":
     # Download Parameters
     min_static_year = 2017
     max_static_year = 2023
-    download_folder = "./data/raw/hmda_temp" # Changed folder to be more specific
+    download_folder = "./data/raw" # Changed folder to be more specific
 
     # Download Static Files
     for year in range(min_static_year, max_static_year+1) :
