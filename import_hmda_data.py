@@ -168,6 +168,7 @@ def import_hmda_streaming(data_folder, save_folder, schema_file, min_year=2007, 
                     time.sleep(1)
                     os.remove(raw_file)
 
+#%% Cleaning Functions
 # Clean Data After 2017
 def clean_hmda_post_2017(data_folder, min_year=2018, max_year=2023, replace=False) :
     """
@@ -501,6 +502,6 @@ if __name__ == '__main__' :
 
     # Update File List
     data_folder = CLEAN_DIR
-    HMDALoader.update_file_list(data_folder)
+    # HMDALoader.update_file_list(data_folder)
 
 #%%
