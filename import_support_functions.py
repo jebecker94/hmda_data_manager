@@ -8,6 +8,7 @@ import subprocess
 import pyarrow as pa
 from csv import Sniffer
 import polars as pl
+import ast
 
 # Get Delimiter
 def get_delimiter(file_path, bytes=4096) :
@@ -626,3 +627,64 @@ def downcast_hmda_variables(df) :
 
     # Return DataFrame and Labels
     return df
+
+# Save to Stata
+def save_file_to_stata(file) :
+    df = pd.read_parquet(file)
+    df, variable_labels, value_labels = prepare_hmda_for_stata(df)
+    save_file_dta = file.replace('.parquet','.dta')
+    df.to_stata(save_file_dta,
+                write_index=False,
+                variable_labels=variable_labels,
+                value_labels=value_labels,
+                )
+
+# Prepare for Stata
+def prepare_hmda_for_stata(df) :
+    """
+    Create variable and value labels to save DTA files for stata.
+
+    Parameters
+    ----------
+    df : pandas DataFrame
+        Data.
+
+    Returns
+    -------
+    df : pandas DataFrame
+        Data cleaned for stata format.
+    variable_labels : dictionary
+        Labels for variables in the data.
+    value_labels : dictionary
+        Labels for values in the data.
+
+    """
+
+    # Read Value Labels
+    value_label_file = RAW_DIR / "loans/hmda_value_labels.txt"
+    with open(value_label_file, 'r') as f :
+        value_labels = ast.literal_eval(f.read())
+
+    # Read Variable Labels
+    variable_label_file = RAW_DIR / "loans/hmda_variable_labels.txt"
+    with open(variable_label_file, 'r') as f :
+        variable_labels = ast.literal_eval(f.read())
+
+    # Trim Value and Variable Labels
+    variable_labels = {key[0:32].replace('-','_'):value[0:80] for key,value in variable_labels.items() if key in df.columns}
+    value_labels = {key[0:32].replace('-','_'):value for key,value in value_labels.items() if key in df.columns}
+    df.columns = [x[0:32].replace('-','_') for x in df.columns]
+
+    # Downcast Numeric Types
+    vl = [key for key,value in value_labels.items()]
+    for col in vl+['activity_year'] :
+        try :
+            df[col] = df[col].astype('Int16')
+        except (TypeError, OverflowError) :
+            print('Cannot downcast variable:', col)
+    for col in ['msa_md', 'county_code', 'sequence_number'] :
+        if col in df.columns :
+            df[col] = df[col].astype('Int32')
+
+    # Return DataFrame and Labels
+    return df, variable_labels, value_labels
