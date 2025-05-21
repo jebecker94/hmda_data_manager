@@ -12,6 +12,9 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import config
 from typing import Union
+import glob
+import os
+import re
 
 # Set Folder Paths
 DATA_DIR = config.DATA_DIR
@@ -160,3 +163,112 @@ def load_hmda_file(
 
     # Return DataFrame
     return df
+
+#%% File Management
+# Extract Year From FileNames
+def extract_years_from_strings(strings) :
+    years = []
+    for string in strings:
+        found_year = re.findall(r'\d{4}', string)[0]
+        years.append(found_year)
+    return years
+
+# Update File List
+def update_file_list(data_folder) :
+    """
+    Creates a CSV list of all HMDA files. Helps to standardize future work by
+    keeping track of which version of a file we should be using.
+
+    Parameters
+    ----------
+    data_folder : str
+        Folder where cleaned HMDA data is stored.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # Get List of Files and Drop Folders
+    files = glob.glob(f'{data_folder}/**', recursive=True)
+    files = [x for x in files if os.path.isfile(x)]
+    files = [x for x in files if 'file_list_hmda' not in x]
+
+    # Create DataFrame and Get Prefix
+    df = pd.DataFrame(files, columns=['FileName'])
+    df['FilePrefix'] = [os.path.basename(x).split('.')[0] for x in df['FileName']]
+
+    # Get File Types by Prefix
+    df['FileParquet'] = 1*df.FileName.str.lower().str.endswith('.parquet')
+    df['FileCSVGZ'] = 1*df.FileName.str.lower().str.endswith('.csv.gz')
+    df['FileDTA'] = 1*df.FileName.str.lower().str.endswith('.dta')
+    df.FileParquet = df.groupby(['FilePrefix'])['FileParquet'].transform('max')
+    df.FileCSVGZ = df.groupby(['FilePrefix'])['FileCSVGZ'].transform('max')
+    df.FileDTA = df.groupby(['FilePrefix'])['FileDTA'].transform('max')
+
+    # Get File Type
+    df['FileType'] = ''
+    df.loc[df['FilePrefix'].str.lower().str.contains('lar'), 'FileType'] = 'lar'
+    df.loc[df['FilePrefix'].str.lower().str.contains('panel'), 'FileType'] = 'panel'
+    df.loc[df['FilePrefix'].str.lower().str.contains('ts'), 'FileType'] = 'ts'
+
+    # Clean Up
+    df['FolderName'] = [os.path.dirname(x) for x in df['FileName']]
+    df = df.drop(columns=['FileName'])
+    df = df.drop_duplicates()
+
+    # Get Years
+    df['Year'] = extract_years_from_strings(df.FilePrefix)
+    df.Year = df.Year.astype('Int16')
+
+    # Get Version Types from Prefixes
+    df['VersionType'] = 'LAR'
+    df.loc[df['FilePrefix'].str.lower().str.contains('mlar'), 'VersionType'] = 'MLAR'
+    df.loc[df['FilePrefix'].str.lower().str.contains('nationwide'), 'VersionType'] = 'NARC'
+    df.loc[df['FilePrefix'].str.lower().str.contains('public_lar'), 'VersionType'] = 'SNAP'
+    df.loc[df['FilePrefix'].str.lower().str.contains('public_panel'), 'VersionType'] = 'SNAP'
+    df.loc[df['FilePrefix'].str.lower().str.contains('public_ts'), 'VersionType'] = 'SNAP'
+    df.loc[df['FilePrefix'].str.lower().str.contains('one_year'), 'VersionType'] = 'YEAR1'
+    df.loc[df['FilePrefix'].str.lower().str.contains('three_year'), 'VersionType'] = 'YEAR3'
+    df.VersionType = pd.Categorical(df.VersionType,
+                                    categories=['YEAR3','YEAR1','SNAP','MLAR','NARC','LAR'],
+                                    ordered=True)
+
+    # Create Master Indicator
+    df = df.sort_values(by=['FileType','Year','VersionType'], ascending=True)
+    df['VersionRank'] = df.groupby(['Year'])['VersionType'].rank('dense')
+    df['i_Master'] = 1*(df['VersionRank'] == 1)
+    df = df.drop(columns=['VersionRank'])
+
+    # Re-order Variables and Save
+    df = df[['FileType','Year','FilePrefix','VersionType','i_Master','FileParquet','FileCSVGZ','FileDTA','FolderName']]
+    df.to_csv(f'{data_folder}/file_list_hmda.csv', index=False)
+
+# Get File Type
+def get_file_type_code(file_name) :
+    
+    # Get Base Name of File
+    base_name = os.path.basename(file_name).split('.')[0]
+    
+    # Get Version Types from Prefixes
+    file_type_code = None
+    if 'mlar' in base_name.lower() :
+        file_type_code = 'e'
+    if 'nationwide' in base_name.lower() :
+        file_type_code = 'd'
+    if 'public_lar' in base_name.lower() :
+        file_type_code = 'c'
+    if 'public_panel' in base_name.lower() :
+        file_type_code = 'c'
+    if 'public_ts' in base_name.lower() :
+        file_type_code = 'c'
+    if 'one_year' in base_name.lower() :
+        file_type_code = 'b'
+    if 'three_year' in base_name.lower() :
+        file_type_code = 'a'
+    if not file_type_code :
+        raise ValueError("Cannot parse the HMDA file type from the provided file name.")
+        
+    # Return Type Code
+    return file_type_code
