@@ -153,8 +153,8 @@ def load_hmda_file(
             if verbose :
                 print('Adding data from file:', file)
             df_a = pl.scan_parquet(file, **kwargs) # Note: We'll default to lazy loading when using polars
-            df_a = df_a.select(columns)
-            df_a = df_a.filter(filters) # Note: Filters must be passed in polars format
+            # df_a = df_a.filter(filters) # Note: Filters must be passed in polars format
+            # df_a = df_a.select(columns)
             df.append(df_a)
         df = pl.concat(df)
 

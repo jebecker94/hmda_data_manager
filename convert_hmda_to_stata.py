@@ -30,16 +30,16 @@ def prepare_hmda_for_stata(df) :
     Parameters
     ----------
     df : pandas DataFrame
-        DESCRIPTION.
+        Data.
 
     Returns
     -------
     df : pandas DataFrame
-        DESCRIPTION.
+        Data cleaned for stata format.
     variable_labels : dictionary
-        DESCRIPTION.
+        Labels for variables in the data.
     value_labels : dictionary
-        DESCRIPTION.
+        Labels for values in the data.
 
     """
 

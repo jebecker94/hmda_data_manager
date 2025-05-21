@@ -610,6 +610,6 @@ if __name__ == '__main__' :
 
     # Update File List
     data_folder = CLEAN_DIR
-    # update_file_list(data_folder)
+    update_file_list(data_folder)
 
 #%%
