@@ -10,6 +10,41 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager # Automates driver management
 from selenium.webdriver.chrome.options import Options
+import re
+from email.utils import parsedate_to_datetime
+from datetime import datetime
+
+# Determine subfolder for a given HMDA filename
+def determine_raw_subfolder(file_name: str) -> str:
+    """
+    Route downloaded ZIP files into subfolders under data/raw based on filename.
+
+    Returns one of: 'loans', 'msamd', 'panel', 'transmissal_series', 'misc'.
+    """
+    name = file_name.lower()
+
+    # MSAMD geography files
+    if 'msamd' in name:
+        return 'msamd'
+
+    # Transmittal Series (TS)
+    if ('public_ts' in name) or ('transmiss' in name) or re.search(r'(^|[_-])ts([_-]|$)', name):
+        return 'transmissal_series'
+
+    # Panel files
+    if ('public_panel' in name) or re.search(r'(^|[_-])panel([_-]|$)', name):
+        return 'panel'
+
+    # Loan files (LAR / MLAR / nationwide loan-level)
+    if ('mlar' in name) or ('public_lar' in name) or re.search(r'(^|[_-])lar([_-]|$)', name) or ('nationwide' in name):
+        return 'loans'
+
+    # Other known misc assets
+    if ('arid2017' in name) or ('avery' in name):
+        return 'misc'
+
+    # Default catch-all
+    return 'misc'
 
 # Download Excel Files from URL
 def download_zip_files_from_url(
@@ -20,6 +55,7 @@ def download_zip_files_from_url(
     download_csvs: bool=True,
     download_pipes: bool=False,
     download_all: bool=False,
+    overwrite_mode: str='skip',
 ):
     """
     Finds all linked ZIP files on a given webpage (after JavaScript rendering)
@@ -34,6 +70,11 @@ def download_zip_files_from_url(
                                   will be downloaded.
         pause_length (int): Time in seconds to pause between downloads.
         wait_time (int): Time in seconds to wait for the page to load JavaScript.
+        overwrite_mode (str): What to do if the destination file already exists.
+            - 'skip' (default): do not re-download
+            - 'always': always re-download and overwrite
+            - 'if_newer': re-download if server Last-Modified is newer than local mtime
+            - 'if_size_diff': re-download if server Content-Length differs from local size
     """
 
     try:
@@ -87,9 +128,53 @@ def download_zip_files_from_url(
                     logging.warning(f"Could not derive filename from URL {file_url}: {e}. Using a generic name.")
                     file_name = f"zip_file_{zip_links_found}{Path(href).suffix or '.zip'}"
 
-                # Only Download New Files
-                file_path = dest_path / file_name
-                if not os.path.exists(file_path) :
+                # Determine destination subfolder based on file name
+                subfolder = determine_raw_subfolder(file_name)
+                subfolder_path = dest_path / subfolder
+                subfolder_path.mkdir(parents=True, exist_ok=True)
+
+                # Only Download New Files or Overwrite per mode
+                file_path = subfolder_path / file_name
+                need_download = not os.path.exists(file_path)
+
+                if not need_download and overwrite_mode.lower() in ['always']:
+                    need_download = True
+
+                if not need_download and overwrite_mode.lower() in ['if_newer', 'if_size_diff']:
+                    try:
+                        headers = {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36'
+                        }
+                        head_resp = requests.head(file_url, headers=headers, allow_redirects=True, timeout=30)
+                        head_resp.raise_for_status()
+
+                        if overwrite_mode.lower() == 'if_newer':
+                            last_mod = head_resp.headers.get('Last-Modified')
+                            if last_mod:
+                                try:
+                                    remote_dt = parsedate_to_datetime(last_mod)
+                                    local_dt = datetime.utcfromtimestamp(os.path.getmtime(file_path))
+                                    if remote_dt.tzinfo is None:
+                                        remote_dt = remote_dt.replace(tzinfo=None)
+                                    # Compare in UTC-naive
+                                    if remote_dt > local_dt:
+                                        need_download = True
+                                except Exception as e:
+                                    logging.warning(f"Could not parse Last-Modified for {file_name}: {e}")
+                        if (not need_download) and (overwrite_mode.lower() == 'if_size_diff'):
+                            cl = head_resp.headers.get('Content-Length')
+                            if cl is not None:
+                                try:
+                                    remote_size = int(cl)
+                                    local_size = os.path.getsize(file_path)
+                                    if remote_size != local_size:
+                                        need_download = True
+                                except Exception as e:
+                                    logging.warning(f"Size compare failed for {file_name}: {e}")
+                    except requests.exceptions.RequestException as e:
+                        logging.warning(f"HEAD request failed for {file_url}: {e}. Proceeding per overwrite_mode='{overwrite_mode}'.")
+
+                if need_download:
                     logging.info(f"Downloading {file_url} to {file_path}...")
                     try:
                         # Specify User Agent for getting page contents (for the download request)
@@ -113,7 +198,7 @@ def download_zip_files_from_url(
                     except IOError as e:
                         logging.error(f"Error saving file {file_name} to {file_path}: {e}")
                 else:
-                    logging.info(f"File {file_path} already exists. Skipping download.")
+                    logging.info(f"File {file_path} already exists. Skipping download (overwrite_mode='{overwrite_mode}').")
         
         if zip_links_found == 0:
             logging.info("No zip file links found on the page.")
@@ -132,8 +217,8 @@ if __name__ == "__main__":
     historical_url = 'https://www.consumerfinance.gov/data-research/hmda/historic-data/?geo=nationwide&records=originated-records&field_descriptions=codes'
 
     # Download Parameters
-    min_static_year = 2017
-    max_static_year = 2023
+    min_static_year = 2024
+    max_static_year = 2024
     download_folder = "./data/raw" # Changed folder to be more specific
 
     # Download Static Files
@@ -143,9 +228,9 @@ if __name__ == "__main__":
             download_zip_files_from_url(target_url, download_folder)
 
     # Download MLAR Files (Currently Doesn't Include Headers)
-    for year in range(2018, 2024+1) :
-        target_url = mlar_base_url + f'/{year}'
-        download_zip_files_from_url(target_url, download_folder, download_all=True)
+    # for year in range(2018, 2024+1) :
+    #     target_url = mlar_base_url + f'/{year}'
+    #     download_zip_files_from_url(target_url, download_folder, download_all=True)
 
     # Download Historical Files (2007-2017)
     target_url = historical_url
