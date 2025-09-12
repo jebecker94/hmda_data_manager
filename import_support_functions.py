@@ -1,6 +1,5 @@
 # Import Packages
 import io
-import os
 import zipfile
 import pandas as pd
 import numpy as np
@@ -9,6 +8,7 @@ import pyarrow as pa
 from csv import Sniffer
 import polars as pl
 import ast
+from pathlib import Path
 
 
 # Get Delimiter
@@ -174,15 +174,17 @@ def replace_csv_column_names(csv_file, column_name_mapper={}):
 
 
 # Unzip HMDA Data
-def unzip_hmda_file(zip_file, raw_folder, replace=False):
+def unzip_hmda_file(
+    zip_file: Path | str, raw_folder: Path | str, replace: bool = False
+) -> Path:
     """
     Unzip zipped HMDA archives.
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         Folder where zip files are stored.
-    save_folder : str
+    save_folder : Path
         Folder where unzipped files will be saved.
     replace : bool, optional
         Whether to replace the unzipped file if one already exists. The default is False.
@@ -191,15 +193,17 @@ def unzip_hmda_file(zip_file, raw_folder, replace=False):
 
     Returns
     -------
-    raw_file_name : str
+    raw_file_name : Path
         File name of the unzipped file.
 
     """
 
     # Check that File is Zip. If not, check for similar named zip file
-    if not zip_file.lower().endswith(".zip"):
-        zip_file = zip_file + ".zip"
-        if not os.path.exists(zip_file):
+    zip_file = Path(zip_file)
+    raw_folder = Path(raw_folder)
+    if zip_file.suffix.lower() != ".zip":
+        zip_file = zip_file.with_suffix(".zip")
+        if not zip_file.exists():
             raise ValueError(
                 "The file name was not given as a zip file. Failed to find a comparably-named zip file."
             )
@@ -213,8 +217,8 @@ def unzip_hmda_file(zip_file, raw_folder, replace=False):
         ]
         for file in delimited_files:
             # Unzip if New File Doesn't Exist or Replace Option is On
-            raw_file_name = f"{raw_folder}/{file}"
-            if (not os.path.exists(raw_file_name)) or replace:
+            raw_file_name = raw_folder / file
+            if (not raw_file_name.exists()) or replace:
                 # Extract and Create Temporary File
                 print("Extracting File:", file)
                 try:
@@ -230,9 +234,9 @@ def unzip_hmda_file(zip_file, raw_folder, replace=False):
                         [
                             unzip_string,
                             "e",
-                            f"{zip_file}",
+                            str(zip_file),
                             f"-o{raw_folder}",
-                            f"{file}",
+                            file,
                             "-y",
                         ]
                     )
