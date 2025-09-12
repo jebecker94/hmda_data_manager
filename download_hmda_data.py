@@ -214,7 +214,7 @@ if __name__ == "__main__":
     snapshot_base_url = 'https://ffiec.cfpb.gov/data-publication/snapshot-national-loan-level-dataset'
     one_year_base_url = 'https://ffiec.cfpb.gov/data-publication/one-year-national-loan-level-dataset'
     three_year_base_url = 'https://ffiec.cfpb.gov/data-publication/three-year-national-loan-level-dataset'
-    historical_url = 'https://www.consumerfinance.gov/data-research/hmda/historic-data/?geo=nationwide&records=originated-records&field_descriptions=codes'
+    historical_url = 'https://www.consumerfinance.gov/data-research/hmda/historic-data/?geo=nationwide&records=all-records&field_descriptions=codes'
 
     # Download Parameters
     min_static_year = 2024
