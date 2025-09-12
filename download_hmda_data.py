@@ -228,9 +228,9 @@ if __name__ == "__main__":
             download_zip_files_from_url(target_url, download_folder)
 
     # Download MLAR Files (Currently Doesn't Include Headers)
-    # for year in range(2018, 2024+1) :
-    #     target_url = mlar_base_url + f'/{year}'
-    #     download_zip_files_from_url(target_url, download_folder, download_all=True)
+    for year in range(2018, 2024+1) :
+        target_url = mlar_base_url + f'/{year}'
+        download_zip_files_from_url(target_url, download_folder, download_all=True)
 
     # Download Historical Files (2007-2017)
     target_url = historical_url
