@@ -280,12 +280,12 @@ def destring_hmda_cols_pre2007(df) :
     Parameters
     ----------
     df : pandas DataFrame
-        DESCRIPTION.
+        DataFrame containing HMDA data with numeric fields stored as strings.
     
     Returns
     -------
     df : pandas DataFrame
-        DESCRIPTION.
+        DataFrame with numeric columns converted to numeric dtype.
 
     """
     
@@ -404,13 +404,13 @@ def destring_hmda_cols_after_2018(lf) :
 
     Parameters
     ----------
-    df : pandas DataFrame
-        DESCRIPTION.
+    lf : pl.DataFrame or pl.LazyFrame
+        HMDA data with numeric columns represented as strings.
 
     Returns
     -------
-    df : pandas DataFrame
-        DESCRIPTION.
+    lf : pl.DataFrame or pl.LazyFrame
+        DataFrame with numeric fields cast to appropriate numeric types.
 
     """
 
@@ -606,12 +606,12 @@ def downcast_hmda_variables(df) :
     Parameters
     ----------
     df : pandas DataFrame
-        DESCRIPTION.
+        DataFrame whose numeric columns should be downcast to smaller dtypes.
 
     Returns
     -------
     df : pandas DataFrame
-        DESCRIPTION.
+        DataFrame with downcasted numeric columns.
 
     """
 

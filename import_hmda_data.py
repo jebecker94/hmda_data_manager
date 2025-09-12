@@ -30,11 +30,11 @@ def import_hmda_pre_2007(data_folder, save_folder, min_year=1981, max_year=2006,
     Parameters
     ----------
     data_folder : str
-        DESCRIPTION.
+        Folder containing raw HMDA text files.
     save_folder : str
-        DESCRIPTION.
+        Directory where cleaned files will be written.
     contains_string : str, optional
-        DESCRIPTION. The default is 'HMDA_LAR'.
+        Substring used to identify HMDA files to process. The default is 'HMDA_LAR'.
 
     Returns
     -------
@@ -258,14 +258,14 @@ def clean_hmda_2007_2017(data_folder, min_year=2007, max_year=2017, replace=Fals
 
     Parameters
     ----------
-    data_folder : TYPE
-        DESCRIPTION.
-    save_folder : TYPE
-        DESCRIPTION.
-    min_year : TYPE, optional
-        DESCRIPTION. The default is 2007.
-    max_year : TYPE, optional
-        DESCRIPTION. The default is 2017.
+    data_folder : str
+        Folder containing HMDA parquet files.
+    min_year : int, optional
+        First year to process. The default is 2007.
+    max_year : int, optional
+        Last year to process. The default is 2017.
+    replace : bool, optional
+        Overwrite existing cleaned files if True. The default is False.
 
     Returns
     -------
