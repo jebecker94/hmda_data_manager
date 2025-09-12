@@ -10,10 +10,9 @@ import polars as pl
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
+from pathlib import Path
 import config
 from typing import Union
-import glob
-import os
 import re
 
 # Set Folder Paths
@@ -22,7 +21,7 @@ DATA_DIR = config.DATA_DIR
 
 # Get List of HMDA Files
 def get_hmda_files(
-    data_folder=DATA_DIR,
+    data_folder: Path = DATA_DIR,
     file_type="lar",
     min_year=None,
     max_year=None,
@@ -34,7 +33,7 @@ def get_hmda_files(
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         The folder where the HMDA files are stored.
     min_year : int, optional
         The first year of HMDA files to return. The default is None.
@@ -53,7 +52,8 @@ def get_hmda_files(
     """
 
     # Path of File List
-    list_file = f"{data_folder}/file_list_hmda.csv"
+    data_folder = Path(data_folder)
+    list_file = data_folder / "file_list_hmda.csv"
 
     # Load File List
     df = pl.read_csv(list_file)
@@ -87,10 +87,11 @@ def get_hmda_files(
     df = df.sort("Year")
 
     # Get File Names And Add Extensions
-    folders = df["FolderName"].to_list()
-    files = df["FilePrefix"].to_list()
+    folders = [Path(x) for x in df["FolderName"].to_list()]
+    prefixes = df["FilePrefix"].to_list()
+    files = [folder / prefix for folder, prefix in zip(folders, prefixes)]
     if extension:
-        files = [f"{x}/{y}.{extension}" for x, y in zip(folders, files)]
+        files = [file.with_suffix(f".{extension}") for file in files]
 
     # Return File List
     return files
@@ -98,7 +99,7 @@ def get_hmda_files(
 
 # Load HMDA Files
 def load_hmda_file(
-    data_folder=DATA_DIR,
+    data_folder: Path = DATA_DIR,
     file_type="lar",
     min_year=2018,
     max_year=2023,
@@ -115,7 +116,7 @@ def load_hmda_file(
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         The folder where the HMDA files are stored.
     file_type : str, optional
         The type of HMDA file to load. The default is 'lar'.
@@ -197,14 +198,14 @@ def extract_years_from_strings(strings):
 
 
 # Update File List
-def update_file_list(data_folder):
+def update_file_list(data_folder: Path):
     """
     Creates a CSV list of all HMDA files. Helps to standardize future work by
     keeping track of which version of a file we should be using.
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         Folder where cleaned HMDA data is stored.
 
     Returns
@@ -214,17 +215,15 @@ def update_file_list(data_folder):
     """
 
     # Get List of Files and Drop Folders
-    files = glob.glob(f"{data_folder}/**", recursive=True)
-    files = [x for x in files if os.path.isfile(x)]
-    files = [x for x in files if "file_list_hmda" not in x]
+    data_folder = Path(data_folder)
+    files = [f for f in data_folder.rglob("*") if f.is_file()]
+    files = [f for f in files if "file_list_hmda" not in f.name]
 
     # Create DataFrame and Get Prefix
-    df = pl.DataFrame({"FileName": files})
+    df = pl.DataFrame({"FileName": [str(f) for f in files]})
     df = df.with_columns(
         pl.col("FileName")
-        .map_elements(
-            lambda x: os.path.basename(x).split(".")[0], return_dtype=pl.String
-        )
+        .map_elements(lambda x: Path(x).stem, return_dtype=pl.String)
         .alias("FilePrefix")
     )
 
@@ -272,7 +271,7 @@ def update_file_list(data_folder):
     # Clean Up
     df = df.with_columns(
         pl.col("FileName")
-        .map_elements(lambda x: os.path.dirname(x), return_dtype=pl.String)
+        .map_elements(lambda x: str(Path(x).parent), return_dtype=pl.String)
         .alias("FolderName")
     )
     df = df.drop("FileName").unique()
@@ -328,13 +327,13 @@ def update_file_list(data_folder):
             "FolderName",
         ]
     )
-    df.write_csv(f"{data_folder}/file_list_hmda.csv")
+    df.write_csv(data_folder / "file_list_hmda.csv")
 
 
 # Get File Type
-def get_file_type_code(file_name):
+def get_file_type_code(file_name: Path | str):
     # Get Base Name of File
-    base_name = os.path.basename(file_name).split(".")[0]
+    base_name = Path(file_name).stem
 
     # Get Version Types from Prefixes
     file_type_code = None

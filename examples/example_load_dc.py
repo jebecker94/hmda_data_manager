@@ -6,15 +6,16 @@ Created on Tue Mar 18 07:00:00 2025
 
 # Import Packages
 import os
-os.chdir(os.path.dirname(__file__) + '/..')
+from pathlib import Path
 import config
 import HMDALoader
 
-# Main Routine
-if __name__=='__main__':
+os.chdir(Path(__file__).resolve().parent.parent)
 
+# Main Routine
+if __name__ == "__main__":
     # Load Combined DC Data
     df = HMDALoader.load_hmda_file(
-            config.CLEAN_DIR,
-            filters=[('state_code','==','DC'),('action_taken','in',[1,6])],
+        config.CLEAN_DIR,
+        filters=[("state_code", "==", "DC"), ("action_taken", "in", [1, 6])],
     )

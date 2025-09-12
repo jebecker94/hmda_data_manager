@@ -8,8 +8,11 @@ import config
 import HMDALoader
 from scipy import stats
 from pyod.models.knn import KNN
+from pathlib import Path
 
-os.chdir(os.path.dirname(__file__) + "/..")
+os.chdir(Path(__file__).resolve().parent.parent)
+OUTPUT_DIR = Path("output")
+OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Set Folder Paths
 DATA_DIR = config.DATA_DIR
@@ -55,7 +58,7 @@ for column in ["income", "loan_amount", "interest_rate"]:
     plt.legend()
     plt.xlabel(f"Average {column} for Lender")
     plt.ylabel("Density")
-    plt.savefig(f"./output/average_{column}_by_lender.png", dpi=250)
+    plt.savefig(OUTPUT_DIR / f"average_{column}_by_lender.png", dpi=250)
     plt.show()
 
 ## PyOD Example

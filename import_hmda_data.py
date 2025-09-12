@@ -7,8 +7,6 @@ Last updated on: Wednesday May 21, 2025
 """
 
 # Import Packages
-import os
-import glob
 import pandas as pd
 import numpy as np
 from pyarrow import csv
@@ -18,6 +16,7 @@ import config
 import time
 import polars as pl
 import shutil
+from pathlib import Path
 from import_support_functions import (
     destring_hmda_cols_2007_2017,
     destring_hmda_cols_after_2018,
@@ -33,21 +32,21 @@ import HMDALoader
 # %% Import Functions
 # Import Historic HMDA Files (Still Needs Work)
 def import_hmda_pre_2007(
-    data_folder,
-    save_folder,
-    min_year=1981,
-    max_year=2006,
-    contains_string="HMDA_LAR",
-    save_to_parquet=True,
+    data_folder: Path,
+    save_folder: Path,
+    min_year: int = 1981,
+    max_year: int = 2006,
+    contains_string: str = "HMDA_LAR",
+    save_to_parquet: bool = True,
 ):
     """
     Import and clean HMDA data before 2007.
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         Folder containing raw HMDA text files.
-    save_folder : str
+    save_folder : Path
         Directory where cleaned files will be written.
     contains_string : str, optional
         Substring used to identify HMDA files to process. The default is 'HMDA_LAR'.
@@ -58,18 +57,19 @@ def import_hmda_pre_2007(
 
     """
 
+    data_folder = Path(data_folder)
+    save_folder = Path(save_folder)
     # Loop Over Years
     for year in range(min_year, max_year + 1):
         # Get Files
-        files = glob.glob(f"{data_folder}/*{year}*.txt")
-        for file in files:
+        for file in data_folder.glob(f"*{year}*.txt"):
             # Get File Name
-            file_name = os.path.basename(file).split(".")[0]
-            save_file_csv = f"{save_folder}/{file_name}.csv.gz"
-            save_file_parquet = f"{save_folder}/{file_name}.parquet"
+            file_name = file.stem
+            save_file_csv = save_folder / f"{file_name}.csv.gz"
+            save_file_parquet = save_folder / f"{file_name}.parquet"
 
             # Read File
-            if not os.path.exists(save_file_parquet):
+            if not save_file_parquet.exists():
                 # Load Raw Data
                 print("Reading file:", file)
                 parse_options = csv.ParseOptions(
@@ -89,7 +89,7 @@ def import_hmda_pre_2007(
 
                 # Save to CSV
                 write_options = csv.WriteOptions(delimiter="|")
-                with pa.CompressedOutputStream(save_file_csv, "gzip") as out:
+                with pa.CompressedOutputStream(str(save_file_csv), "gzip") as out:
                     csv.write_csv(dt, out, write_options=write_options)
                 if save_to_parquet:
                     pq.write_table(dt, save_file_parquet)
@@ -97,14 +97,14 @@ def import_hmda_pre_2007(
 
 # Import Data w/ Streaming
 def import_hmda_streaming(
-    data_folder,
-    save_folder,
-    schema_file,
-    min_year=2007,
-    max_year=2023,
-    replace=False,
-    remove_raw_file=True,
-    add_hmda_index=True,
+    data_folder: Path,
+    save_folder: Path,
+    schema_file: Path,
+    min_year: int = 2007,
+    max_year: int = 2023,
+    replace: bool = False,
+    remove_raw_file: bool = True,
+    add_hmda_index: bool = True,
 ):
     """
     Import and clean HMDA data for 2007 onward.
@@ -118,9 +118,9 @@ def import_hmda_streaming(
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         Folder where raw data is stored.
-    save_folder : str
+    save_folder : Path
         Folder where cleaned data will be saved.
     min_year : int, optional
         First year of data to include. The default is 2007.
@@ -139,21 +139,23 @@ def import_hmda_streaming(
 
     """
 
+    data_folder = Path(data_folder)
+    save_folder = Path(save_folder)
+    schema_file = Path(schema_file)
     # Loop Over Years
     for year in range(min_year, max_year + 1):
         # Get File Name
-        files = glob.glob(f"{data_folder}/*{year}*.zip")
-        for file in files:
+        for file in data_folder.glob(f"*{year}*.zip"):
             # Save File Names
-            file_name = os.path.basename(file).split(".")[0]
+            file_name = file.stem
             if file_name.endswith("_csv"):
                 file_name = file_name[:-4]
             if file_name.endswith("_pipe"):
                 file_name = file_name[:-5]
-            save_file = f"{save_folder}/{file_name}.parquet"
+            save_file = save_folder / f"{file_name}.parquet"
 
             # Clean if Files are Missing
-            if (not os.path.exists(save_file)) or replace:
+            if (not save_file.exists()) or replace:
                 # Detect Delimiter and Read File
                 print("Reading file:", file)
 
@@ -205,18 +207,20 @@ def import_hmda_streaming(
                 # Remove the Temporary Raw File
                 if remove_raw_file:
                     time.sleep(1)
-                    os.remove(raw_file)
+                    Path(raw_file).unlink()
 
 
 # %% Cleaning Functions
 # Clean Data After 2017
-def clean_hmda_post_2017(data_folder, min_year=2018, max_year=2023, replace=False):
+def clean_hmda_post_2017(
+    data_folder: Path, min_year: int = 2018, max_year: int = 2023, replace: bool = False
+):
     """
     Import and clean HMDA data for 2018 onward.
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         Folder where parquet files are stored.
     min_year : int, optional
         First year of data to include. The default is 2018.
@@ -231,16 +235,16 @@ def clean_hmda_post_2017(data_folder, min_year=2018, max_year=2023, replace=Fals
 
     """
 
+    data_folder = Path(data_folder)
     # Loop Over Years
     for year in range(min_year, max_year + 1):
         # Get File Name
-        files = glob.glob(f"{data_folder}/*{year}*.parquet")
-        for file in files:
+        for file in data_folder.glob(f"*{year}*.parquet"):
             # Save File Names
-            save_file_parquet = file.replace(".parquet", "_clean.parquet")
+            save_file_parquet = file.with_name(f"{file.stem}_clean.parquet")
 
             # Clean if Files are Missing
-            if (not os.path.exists(save_file_parquet)) or replace:
+            if (not save_file_parquet.exists()) or replace:
                 lf = pl.scan_parquet(file, low_memory=True)
 
                 # Drop Derived Columns b/c of redundancies
@@ -292,13 +296,15 @@ def clean_hmda_post_2017(data_folder, min_year=2018, max_year=2023, replace=Fals
 
 
 # Clean Historic HMDA Files (2007-2017)
-def clean_hmda_2007_2017(data_folder, min_year=2007, max_year=2017, replace=False):
+def clean_hmda_2007_2017(
+    data_folder: Path, min_year: int = 2007, max_year: int = 2017, replace: bool = False
+):
     """
     Import and clean HMDA data for 2007-2017.
 
     Parameters
     ----------
-    data_folder : str
+    data_folder : Path
         Folder containing HMDA parquet files.
     min_year : int, optional
         First year to process. The default is 2007.
@@ -313,18 +319,19 @@ def clean_hmda_2007_2017(data_folder, min_year=2007, max_year=2017, replace=Fals
 
     """
 
+    data_folder = Path(data_folder)
     # Loop Over Years
     for year in range(min_year, max_year + 1):
         # Get File Name
-        files = glob.glob(f"{data_folder}/*{year}*records*.parquet") + glob.glob(
-            f"{data_folder}/*{year}*public*.parquet"
+        files = list(data_folder.glob(f"*{year}*records*.parquet")) + list(
+            data_folder.glob(f"*{year}*public*.parquet")
         )
         for file in files:
             # Save File Names
-            save_file_parquet = file.replace(".parquet", "_clean.parquet")
+            save_file_parquet = file.with_name(f"{file.stem}_clean.parquet")
 
             # Clean if Files are Missing
-            if (not os.path.exists(save_file_parquet)) or replace:
+            if (not save_file_parquet.exists()) or replace:
                 df = pd.read_parquet(file)
 
                 # Rename HMDA Columns
@@ -374,18 +381,22 @@ def clean_hmda_2007_2017(data_folder, min_year=2007, max_year=2017, replace=Fals
 # %% Combine Files
 # Combine Lenders After 2018
 def combine_lenders_panel_ts_post2018(
-    panel_folder, ts_folder, save_folder, min_year=2018, max_year=2023
+    panel_folder: Path,
+    ts_folder: Path,
+    save_folder: Path,
+    min_year: int = 2018,
+    max_year: int = 2023,
 ):
     """
     Combine Transmissal Series and Panel data for lenders between 2018 and 2022.
 
     Parameters
     ----------
-    panel_folder : str
+    panel_folder : Path
         Folder where raw panel data is stored.
-    ts_folder : str
+    ts_folder : Path
         Folder where raw transmissal series data is stored.
-    save_folder : str
+    save_folder : Path
         Folder where combined data will be saved.
     min_year : int, optional
         First year of data to include. The default is 2018.
@@ -399,9 +410,12 @@ def combine_lenders_panel_ts_post2018(
     """
 
     # Import Panel Data
+    panel_folder = Path(panel_folder)
+    ts_folder = Path(ts_folder)
+    save_folder = Path(save_folder)
     df_panel = []
     for year in range(min_year, max_year + 1):
-        file = glob.glob(f"{panel_folder}/*{year}*.parquet")[0]
+        file = list(panel_folder.glob(f"*{year}*.parquet"))[0]
         df_a = pd.read_parquet(file)
         df_panel.append(df_a)
         del df_a
@@ -410,7 +424,7 @@ def combine_lenders_panel_ts_post2018(
     # Import Transmissal Series Data
     df_ts = []
     for year in range(min_year, max_year + 1):
-        file = glob.glob(f"{ts_folder}/*{year}*.parquet")[0]
+        file = list(ts_folder.glob(f"*{year}*.parquet"))[0]
         df_a = pd.read_parquet(file)
         df_ts.append(df_a)
         del df_a
@@ -423,15 +437,10 @@ def combine_lenders_panel_ts_post2018(
     df = df[df.columns.sort_values()]
 
     # Save
-    df.to_csv(
-        f"{save_folder}/hmda_lenders_combined_{min_year}-{max_year}.csv",
-        index=False,
-        sep="|",
-    )
-    df.to_parquet(
-        f"{save_folder}/hmda_lenders_combined_{min_year}-{max_year}.parquet",
-        index=False,
-    )
+    csv_path = save_folder / f"hmda_lenders_combined_{min_year}-{max_year}.csv"
+    parquet_path = save_folder / f"hmda_lenders_combined_{min_year}-{max_year}.parquet"
+    df.to_csv(csv_path, index=False, sep="|")
+    df.to_parquet(parquet_path, index=False)
 
     ## Deprecated Code
     # ts_folder = '/project/cl/external_data/HMDA/raw_files/transmissal_series'
@@ -457,18 +466,22 @@ def combine_lenders_panel_ts_post2018(
 
 # Combine Lenders Before 2018
 def combine_lenders_panel_ts_pre2018(
-    panel_folder, ts_folder, save_folder, min_year=2007, max_year=2017
+    panel_folder: Path,
+    ts_folder: Path,
+    save_folder: Path,
+    min_year: int = 2007,
+    max_year: int = 2017,
 ):
     """
     Combine Transmissal Series and Panel data for lenders between 2007 and 2017.
 
     Parameters
     ----------
-    panel_folder : str
+    panel_folder : Path
         Folder where raw panel data is stored.
-    ts_folder : str
+    ts_folder : Path
         Folder where raw transmissal series data is stored.
-    save_folder : str
+    save_folder : Path
         Folder where combined data will be saved.
     min_year : int, optional
         First year of data to include. The default is 2007.
@@ -482,9 +495,12 @@ def combine_lenders_panel_ts_pre2018(
     """
 
     # Import TS Data
+    panel_folder = Path(panel_folder)
+    ts_folder = Path(ts_folder)
+    save_folder = Path(save_folder)
     df_ts = []
     for year in range(2007, 2017 + 1):
-        file = glob.glob(f"{ts_folder}/*{year}*.csv")[0]
+        file = list(ts_folder.glob(f"*{year}*.csv"))[0]
         df_a = pd.read_csv(file, low_memory=False)
         df_a.columns = [x.strip() for x in df_a.columns]
         df_a = df_a.drop(
@@ -502,7 +518,7 @@ def combine_lenders_panel_ts_pre2018(
     # Import Panel Data
     df_panel = []
     for year in range(2007, 2017 + 1):
-        file = glob.glob(f"{panel_folder}/*{year}*.csv")[0]
+        file = list(panel_folder.glob(f"*{year}*.csv"))[0]
         df_a = pd.read_csv(file, low_memory=False)
         df_a = df_a.rename(
             columns={
@@ -535,11 +551,8 @@ def combine_lenders_panel_ts_pre2018(
         df.loc[df[column].isin([np.nan, ""]), column] = None
 
     # Save
-    df.to_csv(
-        f"{save_folder}/hmda_lenders_combined_{min_year}-{max_year}.csv",
-        index=False,
-        sep="|",
-    )
+    csv_path = save_folder / f"hmda_lenders_combined_{min_year}-{max_year}.csv"
+    df.to_csv(csv_path, index=False, sep="|")
 
 
 # %% Main Routine
