@@ -356,7 +356,7 @@ def destring_hmda_cols_pre2007(df: pl.DataFrame) -> pl.DataFrame:
         for col in numeric_columns
         if col in df.columns
     ]
-    if casts:
+    if len(casts) > 0:
         df = df.with_columns(casts)
 
     return df
@@ -648,7 +648,7 @@ def split_and_save_tract_variables(df, save_folder, file_name):
             df[tract_variable] = pd.to_numeric(df[tract_variable], errors="coerce")
 
         # Separate and DropExisting Tract Variables
-        if tract_variables:
+        if len(tract_variables) > 0:
             # Separate Tract Variables
             df_tract = df[
                 ["activity_year", "census_tract"] + tract_variables
@@ -668,7 +668,7 @@ def split_and_save_tract_variables(df, save_folder, file_name):
             df = df.with_columns(pl.col(tract_variable).cast(pl.Float64))
 
         # Separate and Drop Existing Tract Variables
-        if tract_variables:
+        if len(tract_variables) > 0:
             # Separate Tract Variables
             df_tract = df.select(
                 ["activity_year", "census_tract"] + tract_variables

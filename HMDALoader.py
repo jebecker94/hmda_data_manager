@@ -63,13 +63,13 @@ def get_hmda_files(
     df = df.filter(pl.col("FileType").str.to_lowercase() == file_type.lower())
 
     # Filter by Years
-    if min_year:
+    if min_year is not None:
         df = df.filter(pl.col("Year") >= min_year)
-    if max_year:
+    if max_year is not None:
         df = df.filter(pl.col("Year") <= max_year)
 
     # Filter by Extension Type
-    if extension:
+    if extension is not None:
         if extension.lower() == "parquet":
             df = df.filter(pl.col("FileParquet") == 1)
         if extension.lower() == "csv.gz":
@@ -78,7 +78,7 @@ def get_hmda_files(
             df = df.filter(pl.col("FileDTA") == 1)
 
     # Filter by Version Type
-    if version_type:
+    if version_type is not None:
         df = df.filter(pl.col("VersionType") == version_type)
 
     # Keep Most Recent File For Each Year
@@ -91,7 +91,7 @@ def get_hmda_files(
     folders = [Path(x) for x in df["FolderName"].to_list()]
     prefixes = df["FilePrefix"].to_list()
     files = [folder / prefix for folder, prefix in zip(folders, prefixes)]
-    if extension:
+    if extension is not None:
         files = [file.with_suffix(f".{extension}") for file in files]
 
     # Return File List
