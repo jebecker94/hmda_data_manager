@@ -7,16 +7,18 @@ Last updated on: Wednesday May 21, 2025
 """
 
 # Import Packages
-import pandas as pd
+import logging
+import shutil
+import time
+from pathlib import Path
+
 import numpy as np
-from pyarrow import csv
+import pandas as pd
+import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
+from pyarrow import csv
 import config
-import time
-import polars as pl
-import shutil
-from pathlib import Path
 from import_support_functions import (
     destring_hmda_cols_2007_2017,
     destring_hmda_cols_after_2018,
@@ -27,6 +29,9 @@ from import_support_functions import (
     unzip_hmda_file,
 )
 import HMDALoader
+
+
+logger = logging.getLogger(__name__)
 
 
 # %% Import Functions
@@ -71,7 +76,7 @@ def import_hmda_pre_2007(
             # Read File
             if not save_file_parquet.exists():
                 # Load Raw Data
-                print("Reading file:", file)
+                logger.info("Reading file: %s", file)
                 parse_options = csv.ParseOptions(
                     delimiter=get_delimiter(file, bytes=16000)
                 )
@@ -157,7 +162,7 @@ def import_hmda_streaming(
             # Clean if Files are Missing
             if (not save_file.exists()) or replace:
                 # Detect Delimiter and Read File
-                print("Reading file:", file)
+                logger.info("Reading file: %s", file)
 
                 # Setup Read and Write Options
                 raw_file = unzip_hmda_file(file, data_folder)
@@ -168,7 +173,7 @@ def import_hmda_streaming(
                 csv_columns = pl.read_csv(
                     raw_file, separator=delimiter, n_rows=0
                 ).columns
-                print(csv_columns)
+                logger.debug("CSV columns: %s", csv_columns)
                 # if year <= 2017 :
                 # # Check size compatibility
                 # schema = pa.schema([(name, dtype) for name, dtype in zip(csv_columns, schema.types)])
