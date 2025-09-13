@@ -6,14 +6,19 @@ Updated On: Wednesday May 21 10:00:00 2025
 """
 
 # Import Packages
-import polars as pl
+import logging
+import re
+from pathlib import Path
+from typing import Union
+
+import config
 import pandas as pd
+import polars as pl
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pathlib import Path
-import config
-from typing import Union
-import re
+
+
+logger = logging.getLogger(__name__)
 
 # Set Folder Paths
 DATA_DIR = config.DATA_DIR
@@ -154,7 +159,7 @@ def load_hmda_file(
     if engine == "pandas":
         for file in files:
             if verbose:
-                print("Adding data from file:", file)
+                logger.info("Adding data from file: %s", file)
             df_a = pd.read_parquet(
                 file, columns=columns, filters=filters, **kwargs
             )  # Note: Filters must be passed in pyarrow/pandas format
@@ -163,7 +168,7 @@ def load_hmda_file(
     if engine == "pyarrow":
         for file in files:
             if verbose:
-                print("Adding data from file:", file)
+                logger.info("Adding data from file: %s", file)
             df_a = pq.read_table(
                 file, columns=columns, filters=filters, **kwargs
             )  # Note: Filters must be passed in pyarrow/pandas format
@@ -172,7 +177,7 @@ def load_hmda_file(
     if engine == "polars":
         for file in files:
             if verbose:
-                print("Adding data from file:", file)
+                logger.info("Adding data from file: %s", file)
             df_a = pl.scan_parquet(
                 file, **kwargs
             )  # Note: We'll default to lazy loading when using polars

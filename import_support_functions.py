@@ -1,14 +1,19 @@
 # Import Packages
-import io
-import zipfile
-import pandas as pd
-import numpy as np
-import subprocess
-import pyarrow as pa
-from csv import Sniffer
-import polars as pl
 import ast
+import io
+import logging
+import subprocess
+import zipfile
+from csv import Sniffer
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import polars as pl
+import pyarrow as pa
+
+
+logger = logging.getLogger(__name__)
 
 
 # Get Delimiter
@@ -226,14 +231,13 @@ def unzip_hmda_file(
             raw_file_name = raw_folder / file
             if (not raw_file_name.exists()) or replace:
                 # Extract and Create Temporary File
-                print("Extracting File:", file)
+                logger.info("Extracting file: %s", file)
                 try:
                     z.extract(file, path=raw_folder)
                 except Exception:
-                    print(
-                        "Could not unzip file:",
+                    logger.warning(
+                        "Could not unzip file: %s with Python's Zipfile package. Using 7z instead.",
                         file,
-                        "with Pythons Zipfile package. Using 7z instead.",
                     )
                     unzip_string = "C:/Program Files/7-Zip/7z.exe"
                     p = subprocess.Popen(
@@ -380,7 +384,7 @@ def destring_hmda_cols_2007_2017(df):
     """
 
     # Dsplay Progress
-    print("Destringing HMDA Variables")
+    logger.info("Destringing HMDA variables")
 
     # Fix County Code and Census Tract
     geo_cols = ["state_code", "county_code", "census_tract"]
@@ -459,7 +463,7 @@ def destring_hmda_cols_after_2018(lf):
     """
 
     # Dsplay Progress
-    print("Destringing HMDA Variables")
+    logger.info("Destringing HMDA variables")
 
     # Replace Exempt w/ -99999
     exempt_cols = [
@@ -778,7 +782,7 @@ def prepare_hmda_for_stata(df, labels_folder=None):
         try:
             df[col] = df[col].astype("Int16")
         except (TypeError, OverflowError):
-            print("Cannot downcast variable:", col)
+            logger.warning("Cannot downcast variable: %s", col)
     for col in ["msa_md", "county_code", "sequence_number"]:
         if col in df.columns:
             df[col] = df[col].astype("Int32")
