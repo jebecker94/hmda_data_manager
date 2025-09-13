@@ -14,6 +14,9 @@ from email.utils import parsedate_to_datetime
 from datetime import datetime
 
 
+logger = logging.getLogger(__name__)
+
+
 # Determine subfolder for an HMDA filename
 def determine_raw_subfolder(file_name: str) -> str:
     """
@@ -101,11 +104,11 @@ def download_zip_files_from_url(
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
-        logging.info(f"Fetching content from URL with Selenium: {page_url}")
+        logger.info(f"Fetching content from URL with Selenium: {page_url}")
         driver.get(page_url)
 
         # Wait for JavaScript to load content.
-        logging.info(f"Waiting {wait_time} seconds for JavaScript to load...")
+        logger.info(f"Waiting {wait_time} seconds for JavaScript to load...")
         time.sleep(wait_time)
 
         page_source = driver.page_source
@@ -139,7 +142,7 @@ def download_zip_files_from_url(
                             f"downloaded_zip_{zip_links_found}{Path(file_url).suffix}"
                         )
                 except Exception as e:
-                    logging.warning(
+                    logger.warning(
                         f"Could not derive filename from URL {file_url}: {e}. Using a generic name."
                     )
                     file_name = (
@@ -185,7 +188,7 @@ def download_zip_files_from_url(
                                     if remote_dt > local_dt:
                                         need_download = True
                                 except Exception as e:
-                                    logging.warning(
+                                    logger.warning(
                                         f"Could not parse Last-Modified for {file_name}: {e}"
                                     )
                         if (not need_download) and (
@@ -199,16 +202,16 @@ def download_zip_files_from_url(
                                     if remote_size != local_size:
                                         need_download = True
                                 except Exception as e:
-                                    logging.warning(
+                                    logger.warning(
                                         f"Size compare failed for {file_name}: {e}"
                                     )
                     except requests.exceptions.RequestException as e:
-                        logging.warning(
+                        logger.warning(
                             f"HEAD request failed for {file_url}: {e}. Proceeding per overwrite_mode='{overwrite_mode}'."
                         )
 
                 if need_download:
-                    logging.info(f"Downloading {file_url} to {file_path}...")
+                    logger.info(f"Downloading {file_url} to {file_path}...")
                     try:
                         # Specify a user agent for the download request.
                         headers = {
@@ -223,31 +226,35 @@ def download_zip_files_from_url(
                             for chunk in file_response.iter_content(chunk_size=8192):
                                 f.write(chunk)
 
-                        logging.info(f"Successfully downloaded {file_name}")
+                        logger.info(f"Successfully downloaded {file_name}")
 
                         # Pause between downloads.
                         time.sleep(pause_length)
 
                     except requests.exceptions.RequestException as e:
-                        logging.error(f"Error downloading {file_url}: {e}")
+                        logger.error(f"Error downloading {file_url}: {e}")
                     except IOError as e:
-                        logging.error(
+                        logger.error(
                             f"Error saving file {file_name} to {file_path}: {e}"
                         )
                 else:
-                    logging.info(
+                    logger.info(
                         f"File {file_path} already exists. Skipping download (overwrite_mode='{overwrite_mode}')."
                     )
 
         if zip_links_found == 0:
-            logging.info("No ZIP links found on the page.")
+            logger.info("No ZIP links found on the page.")
 
     except Exception as e:  # Catch WebDriver and other general errors.
-        logging.error(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}")
 
 
 # Main routine
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
     # Base URLs.
     mlar_base_url = "https://ffiec.cfpb.gov/data-publication/modified-lar"
     snapshot_base_url = (
