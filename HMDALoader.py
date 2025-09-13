@@ -22,33 +22,34 @@ DATA_DIR = config.DATA_DIR
 # Get List of HMDA Files
 def get_hmda_files(
     data_folder: Path = DATA_DIR,
-    file_type="lar",
-    min_year=None,
-    max_year=None,
-    version_type=None,
-    extension=None,
-):
-    """
-    Gets the list of most up-to-date HMDA files.
+    file_type: str = "lar",
+    min_year: int | None = None,
+    max_year: int | None = None,
+    version_type: str | None = None,
+    extension: str | None = None,
+) -> list[Path]:
+    """Return the most recent HMDA files matching the provided filters.
 
     Parameters
     ----------
-    data_folder : Path
-        The folder where the HMDA files are stored.
-    min_year : int, optional
-        The first year of HMDA files to return. The default is None.
-    max_year : int, optional
-        The last year of HMDA files to return. The default is None.
-    version_type : str, optional
-        The version type of HMDA files to return. The default is None.
-    extension : str, optional
-        The file extension of HMDA files to return. The default is None.
+    data_folder : Path, optional
+        Directory containing the HMDA file list. Defaults to ``DATA_DIR``.
+    file_type : str, optional
+        HMDA file type to return, e.g. ``"lar"``. Defaults to ``"lar"``.
+    min_year : int | None, optional
+        Minimum activity year of files to include.
+    max_year : int | None, optional
+        Maximum activity year of files to include.
+    version_type : str | None, optional
+        HMDA version identifier to filter by, such as ``"MLAR"``.
+    extension : str | None, optional
+        Desired file extension (``"parquet"``, ``"csv.gz"``, ``"dta"``). If
+        provided, only files with the extension are returned.
 
     Returns
     -------
-    files : list
-        List of HMDA files.
-
+    list[Path]
+        Ordered list of HMDA file paths.
     """
 
     # Path of File List
@@ -100,46 +101,43 @@ def get_hmda_files(
 # Load HMDA Files
 def load_hmda_file(
     data_folder: Path = DATA_DIR,
-    file_type="lar",
-    min_year=2018,
-    max_year=2023,
-    columns=None,
-    filters=None,
-    verbose=False,
-    engine="pandas",
+    file_type: str = "lar",
+    min_year: int = 2018,
+    max_year: int = 2023,
+    columns: list[str] | None = None,
+    filters: list | None = None,
+    verbose: bool = False,
+    engine: str = "pandas",
     **kwargs,
 ) -> Union[pd.DataFrame, pl.LazyFrame, pl.DataFrame, pa.Table]:
-    """
-    Load HMDA files.
+    """Load a range of HMDA files into a single DataFrame.
 
-    Note that in orrder to load files efficiently, we use only parquet formats. Other formats are not supported at this time, but may be implemented later.
+    The function currently supports only Parquet files for efficiency.
 
     Parameters
     ----------
-    data_folder : Path
-        The folder where the HMDA files are stored.
+    data_folder : Path, optional
+        Directory where HMDA files are stored. Defaults to ``DATA_DIR``.
     file_type : str, optional
-        The type of HMDA file to load. The default is 'lar'.
-    min_year : int, optional
-            The first year of HMDA files to load. The default is 2018.
-    max_year : int, optional
-            The last year of HMDA files to load. The default is 2023.
-    columns : list, optional
-        The columns to load. The default is None.
-    filters : list, optional
-        The filters to apply. The default is None.
+        HMDA file type to load (e.g. ``"lar"``). Defaults to ``"lar"``.
+    min_year, max_year : int, optional
+        Inclusive range of activity years to load. Defaults to 2018--2023.
+    columns : list[str] | None, optional
+        Subset of columns to read from the files.
+    filters : list | None, optional
+        Row filters passed to the underlying Parquet reader.
     verbose : bool, optional
-        Whether to print progress messages. The default is False.
+        If ``True`` print progress messages. Defaults to ``False``.
     engine : str, optional
-        The engine to use for loading the data, either 'pandas', 'polars', or 'pyarrow'. The default is 'pandas'.
-    **kwargs : optional
-        Additional arguments to pass to pd.read_parquet.
+        Backend to use for reading files: ``"pandas"``, ``"polars"`` or
+        ``"pyarrow"``. Defaults to ``"pandas"``.
+    **kwargs : Any
+        Additional keyword arguments forwarded to the backend reader.
 
     Returns
     -------
-    df : DataFrame
-        The loaded HMDA file.
-
+    Union[pd.DataFrame, pl.LazyFrame, pl.DataFrame, pa.Table]
+        Concatenated HMDA dataset.
     """
 
     # Get HMDA Files
@@ -189,29 +187,40 @@ def load_hmda_file(
 
 # %% File Management
 # Extract Year From FileNames
-def extract_years_from_strings(strings):
-    years = []
+def extract_years_from_strings(strings: list[str]) -> list[int]:
+    """Extract four-digit years from a list of strings.
+
+    Parameters
+    ----------
+    strings : list[str]
+        Strings that contain four-digit year substrings.
+
+    Returns
+    -------
+    list[int]
+        Extracted years in the order they appear in ``strings``.
+    """
+    years: list[int] = []
     for string in strings:
-        found_year = re.findall(r"\d{4}", string)[0]
+        found_year = int(re.findall(r"\d{4}", string)[0])
         years.append(found_year)
     return years
 
 
 # Update File List
-def update_file_list(data_folder: Path):
-    """
-    Creates a CSV list of all HMDA files. Helps to standardize future work by
-    keeping track of which version of a file we should be using.
+def update_file_list(data_folder: Path) -> None:
+    """Create ``file_list_hmda.csv`` cataloging available HMDA files.
 
     Parameters
     ----------
     data_folder : Path
-        Folder where cleaned HMDA data is stored.
+        Directory where cleaned HMDA files are stored.
 
     Returns
     -------
-    None.
-
+    None
+        This function writes a CSV file in ``data_folder`` and has no return
+        value.
     """
 
     # Get List of Files and Drop Folders
@@ -331,12 +340,29 @@ def update_file_list(data_folder: Path):
 
 
 # Get File Type
-def get_file_type_code(file_name: Path | str):
+def get_file_type_code(file_name: Path | str) -> str:
+    """Derive the HMDA file type code from a file name.
+
+    Parameters
+    ----------
+    file_name : Path | str
+        Name of the HMDA file.
+
+    Returns
+    -------
+    str
+        Single-character code representing the HMDA file type.
+
+    Raises
+    ------
+    ValueError
+        If the file type cannot be determined from ``file_name``.
+    """
     # Get Base Name of File
     base_name = Path(file_name).stem
 
     # Get Version Types from Prefixes
-    file_type_code = None
+    file_type_code: str | None = None
     if "mlar" in base_name.lower():
         file_type_code = "e"
     if "nationwide" in base_name.lower():
