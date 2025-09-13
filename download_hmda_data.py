@@ -176,7 +176,7 @@ def download_zip_files_from_url(
 
                         if overwrite_mode.lower() == "if_newer":
                             last_mod = head_resp.headers.get("Last-Modified")
-                            if last_mod:
+                            if last_mod is not None:
                                 try:
                                     remote_dt = parsedate_to_datetime(last_mod)
                                     local_dt = datetime.utcfromtimestamp(
