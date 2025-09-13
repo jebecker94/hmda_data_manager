@@ -12,22 +12,20 @@ from pathlib import Path
 
 
 # Get Delimiter
-def get_delimiter(file_path, bytes=4096):
-    """
-    Gets the delimiter used in a delimiter-separated text file.
+def get_delimiter(file_path: Path | str, bytes: int = 4096) -> str:
+    """Determine the delimiter used in a delimited text file.
 
     Parameters
     ----------
-    file_path : string
-        File path of a delimiter-separated text file.
-    bytes : integer, optional
-        Number of bytes in {file_path} to read in. The default is 4096.
+    file_path : Path | str
+        Path to the delimited text file.
+    bytes : int, optional
+        Number of bytes to read for delimiter detection. Defaults to 4096.
 
     Returns
     -------
-    delimiter : string
-        Delimiter used in {file_path}.
-
+    str
+        Detected delimiter character.
     """
 
     # Initialize CSV Sniffer
@@ -44,21 +42,28 @@ def get_delimiter(file_path, bytes=4096):
 
 
 # Get File Schema
-def get_file_schema(schema_file, schema_type="pyarrow"):
-    """
-    Convert CFPB HMDA schema to a PyArrow or Pandas schema.
+def get_file_schema(
+    schema_file: Path | str, schema_type: str = "pyarrow"
+) -> pa.Schema | dict[str, str] | pl.Schema:
+    """Convert the CFPB HMDA schema to a specified representation.
 
     Parameters
     ----------
-    schema_file : str, optional
-        File path to the CFPB HMDA schema. The default is './hmda_public_lar_schema.html'.
+    schema_file : Path | str
+        Path to the CFPB HMDA schema HTML file.
     schema_type : str, optional
-        Type of schema to convert to. The default is 'pyarrow'.
+        Desired schema representation: ``"pyarrow"``, ``"pandas`` or
+        ``"polars"``. Defaults to ``"pyarrow"``.
 
     Returns
     -------
-    schema : PyArrow Schema or Pandas DataFrame
-        Schema for the HMDA LAR data.
+    pa.Schema | dict[str, str] | pl.Schema
+        Schema compatible with the requested ``schema_type``.
+
+    Raises
+    ------
+    ValueError
+        If ``schema_type`` is not one of the supported options.
     """
 
     # Check Schema Type
@@ -131,22 +136,26 @@ def get_file_schema(schema_file, schema_type="pyarrow"):
 
 
 # Replace Column Names in CSV
-def replace_csv_column_names(csv_file, column_name_mapper={}):
-    """
-    Check the first line of a CSV and replace the column names with correct names according to the provided dictionary.
+def replace_csv_column_names(
+    csv_file: Path | str, column_name_mapper: dict[str, str] | None = None
+) -> None:
+    """Replace column headers in a CSV file based on a mapping.
 
     Parameters
     ----------
-    csv_file : str
-        File path to the CSV file.
-    column_name_mapper : dict
-        Dictionary of column names to replace.
+    csv_file : Path | str
+        Path to the CSV file whose header should be updated.
+    column_name_mapper : dict[str, str] | None, optional
+        Mapping from existing header names to replacement names.
 
     Returns
     -------
-    None.
-
+    None
+        The CSV file is modified in place.
     """
+
+    if column_name_mapper is None:
+        column_name_mapper = {}
 
     # Get File Delimiter
     delimiter = get_delimiter(csv_file, bytes=16000)
@@ -177,25 +186,22 @@ def replace_csv_column_names(csv_file, column_name_mapper={}):
 def unzip_hmda_file(
     zip_file: Path | str, raw_folder: Path | str, replace: bool = False
 ) -> Path:
-    """
-    Unzip zipped HMDA archives.
+    """Extract a compressed HMDA archive.
 
     Parameters
     ----------
-    data_folder : Path
-        Folder where zip files are stored.
-    save_folder : Path
-        Folder where unzipped files will be saved.
+    zip_file : Path | str
+        Path to the ``.zip`` archive containing HMDA data.
+    raw_folder : Path | str
+        Directory where extracted files will be written.
     replace : bool, optional
-        Whether to replace the unzipped file if one already exists. The default is False.
-    file_string : str, optional
-        Partial string to query specific file. The default is 'lar'.
+        If ``True`` existing extracted files will be overwritten. Defaults to
+        ``False``.
 
     Returns
     -------
-    raw_file_name : Path
-        File name of the unzipped file.
-
+    Path
+        Path to the extracted delimited file.
     """
 
     # Check that File is Zip. If not, check for similar named zip file
@@ -258,20 +264,23 @@ def unzip_hmda_file(
 
 
 # Rename HMDA Columns
-def rename_hmda_columns(df, df_type="polars"):
-    """
-    Rename HMDA columns to standardize variable names.
+def rename_hmda_columns(
+    df: pd.DataFrame | pl.DataFrame | pl.LazyFrame, df_type: str = "polars"
+) -> pd.DataFrame | pl.DataFrame | pl.LazyFrame:
+    """Standardize HMDA column names across data formats.
 
     Parameters
     ----------
-    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
-        DataFrame to rename columns in.
+    df : pd.DataFrame | pl.DataFrame | pl.LazyFrame
+        DataFrame with original HMDA column names.
+    df_type : str, optional
+        Indicates the DataFrame library used (``"pandas"`` or ``"polars"``).
+        Defaults to ``"polars"``.
 
     Returns
     -------
-    df : pd.DataFrame, pl.DataFrame, pl.LazyFrame
-        DataFrame with renamed columns.
-
+    pd.DataFrame | pl.DataFrame | pl.LazyFrame
+        DataFrame with standardized column names.
     """
 
     # Column Name Dictionary
@@ -304,20 +313,18 @@ def rename_hmda_columns(df, df_type="polars"):
 
 
 # Dstring HMDA Columns before 2007
-def destring_hmda_cols_pre2007(df):
-    """
-    Destring numeric HMDA columns before 2007.
+def destring_hmda_cols_pre2007(df: pl.DataFrame) -> pl.DataFrame:
+    """Convert numeric HMDA columns stored as strings to numeric types.
 
     Parameters
     ----------
     df : pl.DataFrame
-        DataFrame containing HMDA data with numeric fields stored as strings.
+        HMDA data with numeric fields stored as strings.
 
     Returns
     -------
-    df : pl.DataFrame
+    pl.DataFrame
         DataFrame with numeric columns converted to numeric dtype.
-
     """
 
     # Numeric and Categorical Columns
