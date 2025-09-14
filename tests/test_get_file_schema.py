@@ -3,7 +3,7 @@ from pathlib import Path
 
 pytest.importorskip("polars")
 import polars as pl
-from import_support_functions import get_file_schema
+from hmda_data_manager import get_file_schema
 
 
 def test_polars_schema_returns_expected_types() -> None:
