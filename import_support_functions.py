@@ -49,7 +49,7 @@ def get_delimiter(file_path: Path | str, bytes: int = 4096) -> str:
 # Get File Schema
 def get_file_schema(
     schema_file: Path | str, schema_type: str = "pyarrow"
-) -> pa.Schema | dict[str, str] | pl.Schema:
+) -> pa.Schema | dict[str, str] | dict[str, pl.DataType]:
     """Convert the CFPB HMDA schema to a specified representation.
 
     Parameters
@@ -57,12 +57,12 @@ def get_file_schema(
     schema_file : Path | str
         Path to the CFPB HMDA schema HTML file.
     schema_type : str, optional
-        Desired schema representation: ``"pyarrow"``, ``"pandas`` or
+        Desired schema representation: ``"pyarrow"``, ``"pandas"`` or
         ``"polars"``. Defaults to ``"pyarrow"``.
 
     Returns
     -------
-    pa.Schema | dict[str, str] | pl.Schema
+    pa.Schema | dict[str, str] | dict[str, pl.DataType]
         Schema compatible with the requested ``schema_type``.
 
     Raises
@@ -120,21 +120,20 @@ def get_file_schema(
                 pd_type = "Int64"
             schema[row[FieldVar]] = pd_type
 
-    # Convert the schema to a Polars schema (In progress)
+    # Convert the schema to a Polars schema
     elif schema_type == "polars":
-        schema = {}
+        schema: dict[str, pl.DataType] = {}
         for _, row in df.iterrows():
-            pd_type = pl.String()
+            pl_type: pl.DataType = pl.String
             if row["Type"] == "Numeric":
-                pd_type = pl.Float64()
+                pl_type = pl.Float64
             if (row["Type"] == "Numeric") & (row[LengthVar] <= 4):
-                pd_type = pl.Int16()
+                pl_type = pl.Int16
             if (row["Type"] == "Numeric") & (row[LengthVar] > 4):
-                pd_type = pl.Int32()
+                pl_type = pl.Int32
             if (row["Type"] == "Numeric") & (row[LengthVar] > 9):
-                pd_type = pl.Int64()
-            schema[row[FieldVar]] = pd_type
-        schema = pl.Schema(schema)
+                pl_type = pl.Int64
+            schema[row[FieldVar]] = pl_type
 
     # Return the schema
     return schema
