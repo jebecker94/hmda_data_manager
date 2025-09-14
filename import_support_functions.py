@@ -7,7 +7,10 @@ import zipfile
 from csv import Sniffer
 from pathlib import Path
 
-import numpy as np
+try:
+    import numpy as np
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    np = None  # type: ignore[assignment]
 import pandas as pd
 import polars as pl
 import pyarrow as pa
