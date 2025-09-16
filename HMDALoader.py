@@ -367,23 +367,19 @@ def get_file_type_code(file_name: Path | str) -> str:
     base_name = Path(file_name).stem
 
     # Get Version Types from Prefixes
-    file_type_code: str | None = None
-    if "mlar" in base_name.lower():
-        file_type_code = "e"
-    if "nationwide" in base_name.lower():
-        file_type_code = "d"
-    if "public_lar" in base_name.lower():
-        file_type_code = "c"
-    if "public_panel" in base_name.lower():
-        file_type_code = "c"
-    if "public_ts" in base_name.lower():
-        file_type_code = "c"
-    if "one_year" in base_name.lower():
-        file_type_code = "b"
-    if "three_year" in base_name.lower():
-        file_type_code = "a"
-    if not file_type_code:
-        raise ValueError("Cannot parse the HMDA file type from the provided file name.")
-
-    # Return Type Code
-    return file_type_code
+    base_name_lower = base_name.lower()
+    if "three_year" in base_name_lower:
+        return "a"
+    elif "one_year" in base_name_lower:
+        return "b"
+    elif (
+        "public_lar" in base_name_lower
+        or "public_panel" in base_name_lower
+        or "public_ts" in base_name_lower
+    ):
+        return "c"
+    elif "nationwide" in base_name_lower:
+        return "d"
+    elif "mlar" in base_name_lower:
+        return "e"
+    raise ValueError("Cannot parse the HMDA file type from the provided file name.")
