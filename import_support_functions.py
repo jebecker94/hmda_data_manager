@@ -722,10 +722,23 @@ def downcast_hmda_variables(df):
 
 
 # Save to Stata
-def save_file_to_stata(file):
+def save_file_to_stata(file: Path) -> None:
+    """Convert a Parquet file to Stata format.
+
+    Parameters
+    ----------
+    file : Path
+        Path to the Parquet file to convert.
+
+    Returns
+    -------
+    None
+        This function saves the converted file and does not return anything.
+    """
+
     df = pd.read_parquet(file)
     df, variable_labels, value_labels = prepare_hmda_for_stata(df)
-    save_file_dta = file.replace(".parquet", ".dta")
+    save_file_dta = file.with_suffix(".dta")
     df.to_stata(
         save_file_dta,
         write_index=False,
