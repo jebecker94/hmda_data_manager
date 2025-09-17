@@ -10,6 +10,7 @@ Last updated on: Wednesday May 21, 2025
 import logging
 import shutil
 import time
+from collections.abc import Iterable
 from pathlib import Path
 
 import numpy as np
@@ -32,6 +33,310 @@ import HMDALoader
 
 
 logger = logging.getLogger(__name__)
+
+
+CENSUS_TRACT_COLUMN = "census_tract"
+HMDA_INDEX_COLUMN = "HMDAIndex"
+DERIVED_COLUMNS = [
+    "derived_loan_product_type",
+    "derived_race",
+    "derived_ethnicity",
+    "derived_sex",
+    "derived_dwelling_category",
+]
+POST_2017_TRACT_COLUMNS = [
+    "tract_population",
+    "tract_minority_population_percent",
+    "ffiec_msa_md_median_family_income",
+    "tract_to_msa_income_percentage",
+    "tract_owner_occupied_units",
+    "tract_one_to_four_family_homes",
+    "tract_median_age_of_housing_units",
+]
+PRE2018_TS_DROP_COLUMNS = [
+    "Respondent Name (Panel)",
+    "Respondent City (Panel)",
+    "Respondent State (Panel)",
+]
+
+
+def _normalized_file_stem(stem: str) -> str:
+    """Remove common suffixes from extracted archive names."""
+
+    if stem.endswith("_csv"):
+        stem = stem[:-4]
+    if stem.endswith("_pipe"):
+        stem = stem[:-5]
+    return stem
+
+
+def _should_process_output(path: Path, replace: bool) -> bool:
+    """Return ``True`` when the target path should be generated."""
+
+    return replace or not path.exists()
+
+
+def _limit_schema_to_available_columns(
+    raw_file: Path, delimiter: str, schema: dict[str, pl.DataType]
+) -> dict[str, pl.DataType]:
+    """Restrict a schema to the columns available in a delimited file."""
+
+    csv_columns = pl.read_csv(raw_file, separator=delimiter, n_rows=0).columns
+    logger.debug("CSV columns: %s", csv_columns)
+    return {column: schema[column] for column in csv_columns if column in schema}
+
+
+def _append_hmda_index(
+    lf: pl.LazyFrame, year: int, file_type_code: str
+) -> pl.LazyFrame:
+    """Format the HMDA index values as strings with a consistent prefix."""
+
+    prefix = f"{year}{file_type_code}_"
+    return (
+        lf.cast({HMDA_INDEX_COLUMN: pl.String}, strict=False)
+        .with_columns(pl.col(HMDA_INDEX_COLUMN).str.zfill(9).alias(HMDA_INDEX_COLUMN))
+        .with_columns(
+            (pl.lit(prefix) + pl.col(HMDA_INDEX_COLUMN)).alias(HMDA_INDEX_COLUMN)
+        )
+    )
+
+
+def _build_hmda_lazyframe(
+    raw_file: Path,
+    delimiter: str,
+    schema: dict[str, pl.DataType],
+    year: int,
+    add_hmda_index: bool,
+    archive_path: Path,
+) -> pl.LazyFrame:
+    """Create a ``polars`` lazy frame for a raw HMDA delimited file."""
+
+    if (year < 2017) or (not add_hmda_index):
+        return pl.scan_csv(
+            raw_file, separator=delimiter, low_memory=True, schema=schema
+        )
+
+    lf = pl.scan_csv(
+        raw_file,
+        separator=delimiter,
+        low_memory=True,
+        row_index_name=HMDA_INDEX_COLUMN,
+        infer_schema_length=None,
+    )
+    file_type_code = HMDALoader.get_file_type_code(archive_path)
+    return _append_hmda_index(lf, year, file_type_code)
+
+
+def _process_hmda_archive(
+    archive_path: Path,
+    save_path: Path,
+    schema_file: Path,
+    year: int,
+    remove_raw_file: bool,
+    add_hmda_index: bool,
+) -> None:
+    """Read, clean and persist a single HMDA archive."""
+
+    raw_file_path = Path(unzip_hmda_file(archive_path, archive_path.parent))
+    try:
+        delimiter = get_delimiter(raw_file_path, bytes=16000)
+        schema = get_file_schema(schema_file=schema_file, schema_type="polars")
+        limited_schema = _limit_schema_to_available_columns(
+            raw_file_path, delimiter, schema
+        )
+        lf = _build_hmda_lazyframe(
+            raw_file=raw_file_path,
+            delimiter=delimiter,
+            schema=limited_schema,
+            year=year,
+            add_hmda_index=add_hmda_index,
+            archive_path=archive_path,
+        )
+        lf.sink_parquet(save_path)
+    finally:
+        if remove_raw_file:
+            time.sleep(1)
+            raw_file_path.unlink(missing_ok=True)
+
+
+def _clean_post_2017_lazyframe(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Apply the standard cleaning routine for post-2017 HMDA data."""
+
+    lf = lf.drop(DERIVED_COLUMNS, strict=False)
+    lf = lf.drop(POST_2017_TRACT_COLUMNS, strict=False)
+    lf = destring_hmda_cols_after_2018(lf)
+    return _format_census_tract_lazy(lf)
+
+
+def _format_census_tract_lazy(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Standardize the census tract column within a lazy frame."""
+
+    return (
+        lf.cast({CENSUS_TRACT_COLUMN: pl.Float64}, strict=False)
+        .cast({CENSUS_TRACT_COLUMN: pl.Int64}, strict=False)
+        .cast({CENSUS_TRACT_COLUMN: pl.String}, strict=False)
+        .with_columns(
+            pl.col(CENSUS_TRACT_COLUMN).str.zfill(11).alias(CENSUS_TRACT_COLUMN)
+        )
+    )
+
+
+def _clean_post_2017_file(source: Path, destination: Path) -> None:
+    """Run the post-2017 cleaning pipeline and persist the result."""
+
+    lf = pl.scan_parquet(source, low_memory=True)
+    cleaned = _clean_post_2017_lazyframe(lf)
+    cleaned.sink_parquet(destination)
+
+
+def _add_hmda_index_2017(
+    df: pd.DataFrame, archive_path: Path, year: int
+) -> pd.DataFrame:
+    """Append HMDA index information for 2017 loan application records."""
+
+    file_type_code = HMDALoader.get_file_type_code(archive_path)
+    hmda_index = (
+        pd.Series(range(df.shape[0]), index=df.index, dtype="int64")
+        .astype("string")
+        .str.zfill(9)
+    )
+    df = df.copy()
+    df[HMDA_INDEX_COLUMN] = (
+        df["activity_year"].astype("string") + file_type_code + "_" + hmda_index
+    )
+    return df
+
+
+def _format_census_tract_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize the census tract column within a pandas ``DataFrame``."""
+
+    df = df.copy()
+    df[CENSUS_TRACT_COLUMN] = pd.to_numeric(df[CENSUS_TRACT_COLUMN], errors="coerce")
+    df[CENSUS_TRACT_COLUMN] = df[CENSUS_TRACT_COLUMN].astype("Int64")
+    df[CENSUS_TRACT_COLUMN] = df[CENSUS_TRACT_COLUMN].astype("string")
+    df[CENSUS_TRACT_COLUMN] = df[CENSUS_TRACT_COLUMN].str.zfill(11)
+    df.loc[
+        df[CENSUS_TRACT_COLUMN].str.contains("NA", regex=False),
+        CENSUS_TRACT_COLUMN,
+    ] = ""
+    return df
+
+
+def _clean_2007_2017_dataframe(
+    df: pd.DataFrame, year: int, archive_path: Path
+) -> pd.DataFrame:
+    """Run the cleaning steps shared by the 2007-2017 HMDA files."""
+
+    df = rename_hmda_columns(df)
+    if year == 2017:
+        df = _add_hmda_index_2017(df, archive_path, year)
+    df = df.drop(columns=DERIVED_COLUMNS, errors="ignore")
+    df = destring_hmda_cols_2007_2017(df)
+    return _format_census_tract_dataframe(df)
+
+
+def _clean_2007_2017_file(source: Path, destination: Path, year: int) -> None:
+    """Execute the full 2007-2017 cleaning pipeline and persist the result."""
+
+    df = pd.read_parquet(source)
+    cleaned = _clean_2007_2017_dataframe(df, year, source)
+    table = pa.Table.from_pandas(cleaned, preserve_index=False)
+    pq.write_table(table, destination)
+
+
+def _combined_file_stem(min_year: int, max_year: int) -> str:
+    """Return the output stem used for combined lender files."""
+
+    return f"hmda_lenders_combined_{min_year}-{max_year}"
+
+
+def _find_year_file(folder: Path, year: int, pattern: str) -> Path:
+    """Return the first file matching a year specific pattern."""
+
+    matches = list(folder.glob(pattern.format(year=year)))
+    if not matches:
+        raise FileNotFoundError(
+            f"No files found for pattern '{pattern}' in {folder} for year {year}."
+        )
+    return matches[0]
+
+
+def _load_parquet_series(folder: Path, years: Iterable[int]) -> pd.DataFrame:
+    """Concatenate parquet files across multiple years."""
+
+    frames = [
+        pd.read_parquet(_find_year_file(folder, year, "*{year}*.parquet"))
+        for year in years
+    ]
+    return pd.concat(frames, ignore_index=True)
+
+
+def _load_ts_pre2018(ts_folder: Path, years: Iterable[int]) -> pd.DataFrame:
+    """Load and lightly clean pre-2018 Transmittal Series files."""
+
+    frames = []
+    for year in years:
+        file = _find_year_file(ts_folder, year, "*{year}*.csv")
+        df_year = pd.read_csv(file, low_memory=False)
+        df_year.columns = [column.strip() for column in df_year.columns]
+        df_year = df_year.drop(columns=PRE2018_TS_DROP_COLUMNS, errors="ignore")
+        frames.append(df_year)
+    return pd.concat(frames, ignore_index=True)
+
+
+def _load_panel_pre2018(panel_folder: Path, years: Iterable[int]) -> pd.DataFrame:
+    """Load and harmonize the pre-2018 panel files."""
+
+    rename_map = {
+        "Respondent Identification Number": "Respondent ID",
+        "Parent Identification Number": "Parent Respondent ID",
+        "Parent State (Panel)": "Parent State",
+        "Parent City (Panel)": "Parent City",
+        "Parent Name (Panel)": "Parent Name",
+        "Respondent State (Panel)": "Respondent State",
+        "Respondent Name (Panel)": "Respondent Name",
+        "Respondent City (Panel)": "Respondent City",
+    }
+    frames = []
+    for year in years:
+        file = _find_year_file(panel_folder, year, "*{year}*.csv")
+        df_year = pd.read_csv(file, low_memory=False)
+        df_year = df_year.rename(columns=rename_map)
+        frames.append(df_year)
+    return pd.concat(frames, ignore_index=True)
+
+
+def _merge_panel_ts_post2018(panel: pd.DataFrame, ts: pd.DataFrame) -> pd.DataFrame:
+    """Merge panel and TS data for post-2018 files."""
+
+    df = panel.merge(
+        ts, on=["activity_year", "lei"], how="outer", suffixes=("_panel", "_ts")
+    )
+    return df[df.columns.sort_values()]
+
+
+def _strip_whitespace_and_replace_missing(df: pd.DataFrame) -> pd.DataFrame:
+    """Trim whitespace and normalise missing indicators."""
+
+    for column in df.columns:
+        df[column] = [
+            value.strip() if isinstance(value, str) else value for value in df[column]
+        ]
+        df.loc[df[column].isin([np.nan, ""]), column] = None
+    return df
+
+
+def _merge_panel_ts_pre2018(panel: pd.DataFrame, ts: pd.DataFrame) -> pd.DataFrame:
+    """Merge and tidy the pre-2018 panel and TS data."""
+
+    df = panel.merge(
+        ts,
+        on=["Activity Year", "Respondent ID", "Agency Code"],
+        how="outer",
+        suffixes=(" Panel", " TS"),
+    )
+    df = df[df.columns.sort_values()]
+    return _strip_whitespace_and_replace_missing(df)
 
 
 # %% Import Functions
@@ -146,73 +451,26 @@ def import_hmda_streaming(
 
     data_folder = Path(data_folder)
     save_folder = Path(save_folder)
+    save_folder.mkdir(parents=True, exist_ok=True)
     schema_file = Path(schema_file)
-    # Loop Over Years
+
     for year in range(min_year, max_year + 1):
-        # Get File Name
-        for file in data_folder.glob(f"*{year}*.zip"):
-            # Save File Names
-            file_name = file.stem
-            if file_name.endswith("_csv"):
-                file_name = file_name[:-4]
-            if file_name.endswith("_pipe"):
-                file_name = file_name[:-5]
+        for archive in data_folder.glob(f"*{year}*.zip"):
+            file_name = _normalized_file_stem(archive.stem)
             save_file = save_folder / f"{file_name}.parquet"
 
-            # Clean if Files are Missing
-            if (not save_file.exists()) or replace:
-                # Detect Delimiter and Read File
-                logger.info("Reading file: %s", file)
+            if not _should_process_output(save_file, replace):
+                continue
 
-                # Setup Read and Write Options
-                raw_file = unzip_hmda_file(file, data_folder)
-                delimiter = get_delimiter(raw_file, bytes=16000)
-                schema = get_file_schema(schema_file=schema_file, schema_type="polars")
-
-                # Limit Schema to Cols in CSV
-                csv_columns = pl.read_csv(
-                    raw_file, separator=delimiter, n_rows=0
-                ).columns
-                logger.debug("CSV columns: %s", csv_columns)
-                # if year <= 2017 :
-                # # Check size compatibility
-                # schema = pa.schema([(name, dtype) for name, dtype in zip(csv_columns, schema.types)])
-                if year >= 2018:
-                    # Add functionality to limit to only csv columns
-                    pass
-
-                # Read HMDA Data (Adding HMDA Index After 2017)
-                if (year < 2017) or (not add_hmda_index):
-                    lf = pl.scan_csv(
-                        raw_file, separator=delimiter, low_memory=True, schema=schema
-                    )
-                else:
-                    # lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema, row_index_name='HMDAIndex', infer_schema_length=None)
-                    lf = pl.scan_csv(
-                        raw_file,
-                        separator=delimiter,
-                        low_memory=True,
-                        row_index_name="HMDAIndex",
-                        infer_schema_length=None,
-                    )
-                    file_type = HMDALoader.get_file_type_code(file)
-                    lf = lf.cast({"HMDAIndex": pl.String}, strict=False)
-                    lf = lf.with_columns(
-                        pl.col("HMDAIndex").str.zfill(9).alias("HMDAIndex")
-                    )
-                    lf = lf.with_columns(
-                        (str(year) + file_type + "_" + pl.col("HMDAIndex")).alias(
-                            "HMDAIndex"
-                        )
-                    )
-
-                # Save as Parquet (Streaming)
-                lf.sink_parquet(save_file)
-
-                # Remove the Temporary Raw File
-                if remove_raw_file:
-                    time.sleep(1)
-                    Path(raw_file).unlink()
+            logger.info("Reading file: %s", archive)
+            _process_hmda_archive(
+                archive_path=archive,
+                save_path=save_file,
+                schema_file=schema_file,
+                year=year,
+                remove_raw_file=remove_raw_file,
+                add_hmda_index=add_hmda_index,
+            )
 
 
 # %% Cleaning Functions
@@ -241,63 +499,16 @@ def clean_hmda_post_2017(
     """
 
     data_folder = Path(data_folder)
-    # Loop Over Years
+
     for year in range(min_year, max_year + 1):
-        # Get File Name
         for file in data_folder.glob(f"*{year}*.parquet"):
-            # Save File Names
             save_file_parquet = file.with_name(f"{file.stem}_clean.parquet")
 
-            # Clean if Files are Missing
-            if (not save_file_parquet.exists()) or replace:
-                lf = pl.scan_parquet(file, low_memory=True)
+            if not _should_process_output(save_file_parquet, replace):
+                continue
 
-                # Drop Derived Columns b/c of redundancies
-                derived_columns = [
-                    "derived_loan_product_type",
-                    "derived_race",
-                    "derived_ethnicity",
-                    "derived_sex",
-                    "derived_dwelling_category",
-                ]
-                lf = lf.drop(derived_columns, strict=False)
-
-                # Drop Tract Columns
-                tract_columns = [
-                    "tract_population",
-                    "tract_minority_population_percent",
-                    "ffiec_msa_md_median_family_income",
-                    "tract_to_msa_income_percentage",
-                    "tract_owner_occupied_units",
-                    "tract_one_to_four_family_homes",
-                    "tract_median_age_of_housing_units",
-                ]
-                lf = lf.drop(tract_columns, strict=False)
-
-                # Rename HMDA Columns
-                # lf = rename_hmda_columns(lf, df_type='polars')
-
-                # Destring HMDA Columns
-                lf = destring_hmda_cols_after_2018(lf)
-
-                # Census Tract to String and Fix NAs
-                lf = lf.cast({"census_tract": pl.Float64}, strict=False)
-                lf = lf.cast({"census_tract": pl.Int64}, strict=False)
-                lf = lf.cast({"census_tract": pl.String}, strict=False)
-                lf = lf.with_columns(
-                    pl.col("census_tract").str.zfill(11).alias("census_tract")
-                )
-
-                # Prepare for Stata
-                # df = downcast_hmda_variables(df)
-
-                # Save to Parquet
-                # dt = pa.Table.from_pandas(df, preserve_index=False)
-                # pq.write_table(dt, save_file_parquet)
-                lf.sink_parquet(save_file_parquet)
-
-                # Replace Original File
-                shutil.move(save_file_parquet, file)
+            _clean_post_2017_file(file, save_file_parquet)
+            shutil.move(save_file_parquet, file)
 
 
 # Clean Historic HMDA Files (2007-2017)
@@ -325,62 +536,18 @@ def clean_hmda_2007_2017(
     """
 
     data_folder = Path(data_folder)
-    # Loop Over Years
+
     for year in range(min_year, max_year + 1):
-        # Get File Name
         files = list(data_folder.glob(f"*{year}*records*.parquet")) + list(
             data_folder.glob(f"*{year}*public*.parquet")
         )
         for file in files:
-            # Save File Names
             save_file_parquet = file.with_name(f"{file.stem}_clean.parquet")
 
-            # Clean if Files are Missing
-            if (not save_file_parquet.exists()) or replace:
-                df = pd.read_parquet(file)
+            if not _should_process_output(save_file_parquet, replace):
+                continue
 
-                # Rename HMDA Columns
-                df = rename_hmda_columns(df)
-
-                # Create Unique HMDA Index
-                if year == 2017:
-                    file_type = HMDALoader.get_file_type_code(file)
-                    df["HMDAIndex"] = range(df.shape[0])
-                    df["HMDAIndex"] = df["HMDAIndex"].astype("str").str.zfill(9)
-                    df["HMDAIndex"] = (
-                        df["activity_year"].astype("str")
-                        + file_type
-                        + "_"
-                        + df["HMDAIndex"]
-                    )
-
-                # Drop Derived Columns b/c of redundancies
-                derived_columns = [
-                    "derived_loan_product_type",
-                    "derived_race",
-                    "derived_ethnicity",
-                    "derived_sex",
-                    "derived_dwelling_category",
-                ]
-                df = df.drop(columns=derived_columns, errors="ignore")
-
-                # Drop Tract Variables
-
-                # Destring HMDA Columns
-                df = destring_hmda_cols_2007_2017(df)
-
-                # Census Tract to String and Fix NAs
-                df["census_tract"] = pd.to_numeric(df["census_tract"], errors="coerce")
-                df["census_tract"] = df["census_tract"].astype("Int64")
-                df["census_tract"] = df["census_tract"].astype("str")
-                df["census_tract"] = df["census_tract"].str.zfill(11)
-                df.loc[
-                    df["census_tract"].str.contains("NA", regex=False), "census_tract"
-                ] = ""
-
-                # Save to Parquet
-                dt = pa.Table.from_pandas(df, preserve_index=False)
-                pq.write_table(dt, save_file_parquet)
+            _clean_2007_2017_file(file, save_file_parquet, year)
 
 
 # %% Combine Files
@@ -414,36 +581,19 @@ def combine_lenders_panel_ts_post2018(
 
     """
 
-    # Import Panel Data
     panel_folder = Path(panel_folder)
     ts_folder = Path(ts_folder)
     save_folder = Path(save_folder)
-    df_panel = []
-    for year in range(min_year, max_year + 1):
-        file = list(panel_folder.glob(f"*{year}*.parquet"))[0]
-        df_a = pd.read_parquet(file)
-        df_panel.append(df_a)
-        del df_a
-    df_panel = pd.concat(df_panel)
+    save_folder.mkdir(parents=True, exist_ok=True)
+    years = range(min_year, max_year + 1)
 
-    # Import Transmissal Series Data
-    df_ts = []
-    for year in range(min_year, max_year + 1):
-        file = list(ts_folder.glob(f"*{year}*.parquet"))[0]
-        df_a = pd.read_parquet(file)
-        df_ts.append(df_a)
-        del df_a
-    df_ts = pd.concat(df_ts)
+    df_panel = _load_parquet_series(panel_folder, years)
+    df_ts = _load_parquet_series(ts_folder, years)
+    df = _merge_panel_ts_post2018(df_panel, df_ts)
 
-    # Combined TS and Panel
-    df = df_panel.merge(
-        df_ts, on=["activity_year", "lei"], how="outer", suffixes=("_panel", "_ts")
-    )
-    df = df[df.columns.sort_values()]
-
-    # Save
-    csv_path = save_folder / f"hmda_lenders_combined_{min_year}-{max_year}.csv"
-    parquet_path = save_folder / f"hmda_lenders_combined_{min_year}-{max_year}.parquet"
+    file_stem = _combined_file_stem(min_year, max_year)
+    csv_path = save_folder / f"{file_stem}.csv"
+    parquet_path = save_folder / f"{file_stem}.parquet"
     df.to_csv(csv_path, index=False, sep="|")
     df.to_parquet(parquet_path, index=False)
 
@@ -499,64 +649,17 @@ def combine_lenders_panel_ts_pre2018(
 
     """
 
-    # Import TS Data
     panel_folder = Path(panel_folder)
     ts_folder = Path(ts_folder)
     save_folder = Path(save_folder)
-    df_ts = []
-    for year in range(2007, 2017 + 1):
-        file = list(ts_folder.glob(f"*{year}*.csv"))[0]
-        df_a = pd.read_csv(file, low_memory=False)
-        df_a.columns = [x.strip() for x in df_a.columns]
-        df_a = df_a.drop(
-            columns=[
-                "Respondent Name (Panel)",
-                "Respondent City (Panel)",
-                "Respondent State (Panel)",
-            ],
-            errors="ignore",
-        )
-        df_ts.append(df_a)
-        del df_a
-    df_ts = pd.concat(df_ts)
+    save_folder.mkdir(parents=True, exist_ok=True)
+    years = range(min_year, max_year + 1)
 
-    # Import Panel Data
-    df_panel = []
-    for year in range(2007, 2017 + 1):
-        file = list(panel_folder.glob(f"*{year}*.csv"))[0]
-        df_a = pd.read_csv(file, low_memory=False)
-        df_a = df_a.rename(
-            columns={
-                "Respondent Identification Number": "Respondent ID",
-                "Parent Identification Number": "Parent Respondent ID",
-                "Parent State (Panel)": "Parent State",
-                "Parent City (Panel)": "Parent City",
-                "Parent Name (Panel)": "Parent Name",
-                "Respondent State (Panel)": "Respondent State",
-                "Respondent Name (Panel)": "Respondent Name",
-                "Respondent City (Panel)": "Respondent City",
-            }
-        )
-        df_panel.append(df_a)
-        del df_a
-    df_panel = pd.concat(df_panel)
+    df_ts = _load_ts_pre2018(ts_folder, years)
+    df_panel = _load_panel_pre2018(panel_folder, years)
+    df = _merge_panel_ts_pre2018(df_panel, df_ts)
 
-    # Combined TS and Panel
-    df = df_panel.merge(
-        df_ts,
-        on=["Activity Year", "Respondent ID", "Agency Code"],
-        how="outer",
-        suffixes=(" Panel", " TS"),
-    )
-    df = df[df.columns.sort_values()]
-
-    # Strip Extra Spaces and Replace Missings with None
-    for column in df.columns:
-        df[column] = [x.strip() if isinstance(x, str) else x for x in df[column]]
-        df.loc[df[column].isin([np.nan, ""]), column] = None
-
-    # Save
-    csv_path = save_folder / f"hmda_lenders_combined_{min_year}-{max_year}.csv"
+    csv_path = save_folder / f"{_combined_file_stem(min_year, max_year)}.csv"
     df.to_csv(csv_path, index=False, sep="|")
 
 
