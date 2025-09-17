@@ -6,11 +6,7 @@ import subprocess
 import zipfile
 from csv import Sniffer
 from pathlib import Path
-
-try:
-    import numpy as np
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-    np = None  # type: ignore[assignment]
+import numpy as np
 import pandas as pd
 import polars as pl
 import pyarrow as pa
