@@ -479,7 +479,6 @@ def destring_hmda_cols_after_2018(lf):
         "origination_charges",
         "discount_points",
         "lender_credits",
-        "loan_to_value_ratio",
     ]
     for exempt_col in exempt_cols:
         lf = lf.with_columns(

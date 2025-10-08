@@ -148,7 +148,6 @@ def _process_hmda_archive(
             delimiter,
             schema,
         )
-        print(limited_schema)
         lf = _build_hmda_lazyframe(
             raw_file=raw_file_path,
             delimiter=delimiter,
@@ -474,38 +473,44 @@ if __name__ == "__main__":
     CLEAN_DIR = config.CLEAN_DIR
     PROJECT_DIR = config.PROJECT_DIR
 
+    # Set Year Ranges
+    MIN_YEAR = 2018
+    MAX_YEAR = 2024
+
     # Import HMDA Loan Data
-    # import_hmda_streaming(
-    #     RAW_DIR / "loans",
-    #     CLEAN_DIR / "loans",
-    #     PROJECT_DIR / "schemas/hmda_lar_schema_post2018.html",
-    #     min_year=2018,
-    #     max_year=2024
-    # )
-    clean_hmda_post_2017(
+    import_hmda_streaming(
+        RAW_DIR / "loans",
         CLEAN_DIR / "loans",
-        min_year=2018,
-        max_year=2024,
-        overwrite=True,
+        PROJECT_DIR / "schemas/hmda_lar_schema_post2018.html",
+        min_year=MIN_YEAR,
+        max_year=MAX_YEAR
     )
 
-    # # Import HMDA Transmittal Series Data
-    # import_hmda_streaming(
-    #     RAW_DIR / "transmissal_series",
-    #     CLEAN_DIR / "transmissal_series",
-    #     PROJECT_DIR / "schemas/hmda_ts_schema_post2018.html",
-    #     min_year=2024,
-    #     max_year=2024
-    # )
+    # Import HMDA Transmittal Series Data
+    import_hmda_streaming(
+        RAW_DIR / "transmissal_series",
+        CLEAN_DIR / "transmissal_series",
+        PROJECT_DIR / "schemas/hmda_ts_schema_post2018.html",
+        min_year=MIN_YEAR,
+        max_year=MAX_YEAR
+    )
 
-    # # Import HMDA Panel Data
-    # import_hmda_post_streaming(
-    #     RAW_DIR / "panel",
-    #     CLEAN_DIR / "panel",
-    #     PROJECT_DIR / "schemas/hmda_panel_schema_post2018.html",
-    #     min_year=2024,
-    #     max_year=2024
-    # )
+    # Import HMDA Panel Data
+    import_hmda_streaming(
+        RAW_DIR / "panel",
+        CLEAN_DIR / "panel",
+        PROJECT_DIR / "schemas/hmda_panel_schema_post2018.html",
+        min_year=MIN_YEAR,
+        max_year=MAX_YEAR
+    )
+
+    # Clean loans data
+    clean_hmda_post_2017(
+        CLEAN_DIR / "loans",
+        min_year=MIN_YEAR,
+        max_year=MAX_YEAR,
+        overwrite=True,
+    )
 
     # Combine Lender Files
     ts_folder = CLEAN_DIR / "transmissal_series"

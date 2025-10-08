@@ -186,3 +186,7 @@ def combine_lenders_panel_ts_pre2018(
 
     csv_path = save_folder / f"{_combined_file_stem(min_year, max_year)}.csv"
     df.to_csv(csv_path, index=False, sep="|")
+
+## Main routine
+if __name__ == "__main__":
+    pass
