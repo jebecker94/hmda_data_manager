@@ -22,3 +22,7 @@ These guidelines apply to the entire repository.
 ## Data handling
 - Do not commit large data files.  Paths and credentials should be provided through `config.py` or environment variables.
 
+## Planning checklist
+- Update `planning.md` as plans evolve.
+- Check off items in `planning.md` as they are completed.
+
