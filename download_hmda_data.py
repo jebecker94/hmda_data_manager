@@ -271,11 +271,11 @@ if __name__ == "__main__":
     max_static_year = 2024
     download_folder = "./data/raw"  # Destination folder for downloads.
 
-    # # Download static files.
-    # for year in range(min_static_year, max_static_year + 1):
-    #     for base_url in [snapshot_base_url, one_year_base_url, three_year_base_url]:
-    #         target_url = base_url + f"/{year}"
-    #         download_zip_files_from_url(target_url, download_folder)
+    # Download static files.
+    for year in range(min_static_year, max_static_year + 1):
+        for base_url in [snapshot_base_url, one_year_base_url, three_year_base_url]:
+            target_url = base_url + f"/{year}"
+            download_zip_files_from_url(target_url, download_folder)
 
     # # Download MLAR files (currently excludes headers)
     # if download_mlar:
@@ -288,4 +288,4 @@ if __name__ == "__main__":
     # download_zip_files_from_url(target_url, download_folder, download_all=True)
 
     # Update file list
-    update_file_list(Path('./data').resolve())
+    # update_file_list(Path('./data').resolve())
