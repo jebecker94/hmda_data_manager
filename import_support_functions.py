@@ -6,7 +6,7 @@ import subprocess
 import zipfile
 from csv import Sniffer
 from pathlib import Path
-import numpy as np
+from typing import Optional, Sequence, Tuple
 import pandas as pd
 import polars as pl
 import pyarrow as pa
@@ -389,7 +389,7 @@ def destring_hmda_cols_2007_2017(df):
     df[geo_cols] = df[geo_cols].apply(pd.to_numeric, errors="coerce")
     df["state_code"].astype("Int16")
     df["county_code"] = (1000 * df["state_code"] + df["county_code"]).astype("Int32")
-    df["census_tract"] = np.round(100 * df["census_tract"]).astype("Int32")
+    df["census_tract"] = (100 * df["census_tract"]).round().astype("Int32")
     df["census_tract"] = df["census_tract"].astype(str)
     df["census_tract"] = [x.zfill(6) for x in df["census_tract"]]
     df["census_tract"] = df["county_code"].astype("str") + df["census_tract"]
@@ -800,3 +800,306 @@ def prepare_hmda_for_stata(df, labels_folder=None):
 
     # Return DataFrame and Labels
     return df, variable_labels, value_labels
+
+
+# HMDA cleaning utilities migrated from misc_cleaning_functions.py
+def replace_na_like_values(
+    df: pd.DataFrame,
+    columns: Sequence[str],
+    na_like: Sequence[str] = ("NA", "N/A", "Exempt", "Not Applicable", "NA   ", "nan"),
+) -> pd.DataFrame:
+    """Replace NA-like string tokens in the specified ``columns`` with ``pd.NA``.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input DataFrame that will be copied before modification.
+    columns : Sequence[str]
+        Column names to scan for NA-like tokens.
+    na_like : Sequence[str], optional
+        String tokens to treat as missing values. Defaults to common HMDA
+        placeholders such as ``"NA"`` and ``"Exempt"``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Copy of ``df`` with the requested replacements applied.
+    """
+
+    columns_to_update = [column for column in columns if column in df.columns]
+    if not columns_to_update:
+        return df.copy()
+
+    out = df.copy()
+    replacements = list(na_like)
+    out[columns_to_update] = out[columns_to_update].apply(
+        lambda s: s.replace(replacements, pd.NA)
+    )
+    return out
+
+
+def coerce_numeric_columns(
+    df: pd.DataFrame,
+    numeric_columns: Sequence[str],
+) -> pd.DataFrame:
+    """Convert the provided ``numeric_columns`` to numeric dtype when possible."""
+
+    out = df.copy()
+    for column in numeric_columns:
+        if column in out.columns:
+            out[column] = pd.to_numeric(out[column], errors="coerce")
+    return out
+
+
+def add_identity_keys(
+    df: pd.DataFrame,
+    post2018: bool,
+    uli_col: str = "universal_loan_identifier",
+    lei_col: str = "lei",
+    respondent_id_col: str = "respondent_id",
+    agency_col: str = "agency_code",
+    seq_col: str = "sequence_number",
+) -> pd.DataFrame:
+    """Construct a stable HMDA record key for the supplied data."""
+
+    out = df.copy()
+    if post2018:
+        for column in (uli_col, lei_col):
+            if column not in out.columns:
+                out[column] = pd.NA
+        out["hmda_record_key"] = (
+            out[lei_col].astype(str).str.strip()
+            + "||"
+            + out[uli_col].astype(str).str.strip()
+        )
+    else:
+        for column in (respondent_id_col, agency_col, seq_col):
+            if column not in out.columns:
+                out[column] = pd.NA
+        out["hmda_record_key"] = (
+            out[respondent_id_col].astype(str).str.strip()
+            + "||"
+            + out[agency_col].astype(str).str.strip()
+            + "||"
+            + out[seq_col].astype(str).str.strip()
+        )
+    return out
+
+
+def deduplicate_records(
+    df: pd.DataFrame,
+    keep: str = "last",
+    subset: Optional[Sequence[str]] = None,
+) -> pd.DataFrame:
+    """Drop duplicate HMDA rows based on ``hmda_record_key`` or ``subset``."""
+
+    if "hmda_record_key" not in df.columns:
+        raise ValueError("Run add_identity_keys() before deduplication.")
+
+    dedupe_subset = list(subset) if subset is not None else ["hmda_record_key"]
+    before = len(df)
+    out = df.drop_duplicates(subset=dedupe_subset, keep=keep).copy()
+    out.attrs["dedup_dropped"] = before - len(out)
+    return out
+
+
+def standardize_schema(
+    df: pd.DataFrame,
+    post2018: bool,
+    rename_map_post2018: Optional[dict[str, str]] = None,
+    rename_map_pre2018: Optional[dict[str, str]] = None,
+) -> pd.DataFrame:
+    """Harmonize column names and coerce numeric types across HMDA vintages."""
+
+    out = df.copy()
+    if post2018:
+        default_map = {
+            "loan_amount": "loan_amount",
+            "applicant_income": "applicant_income",
+            "debt_to_income_ratio": "dti",
+            "loan_to_value_ratio": "ltv",
+            "credit_score": "credit_score",
+            "action_taken": "action_taken",
+            "lien_status": "lien_status",
+            "loan_purpose": "loan_purpose",
+            "loan_type": "loan_type",
+            "occupancy_type": "occupancy_type",
+            "rate_spread": "rate_spread",
+            "hoepa_status": "hoepa_status",
+            "purchaser_type": "purchaser_type",
+        }
+        if rename_map_post2018:
+            default_map.update(rename_map_post2018)
+        out = out.rename(columns=default_map)
+    else:
+        default_map = {
+            "applicant_income_000s": "applicant_income",
+            "action_taken_name": "action_taken",
+        }
+        if rename_map_pre2018:
+            default_map.update(rename_map_pre2018)
+        out = out.rename(columns=default_map)
+
+    numeric_columns = [
+        column
+        for column in (
+            "loan_amount",
+            "applicant_income",
+            "dti",
+            "ltv",
+            "credit_score",
+            "rate_spread",
+        )
+        if column in out.columns
+    ]
+    return coerce_numeric_columns(out, numeric_columns)
+
+
+def normalize_missing_and_derived(
+    df: pd.DataFrame,
+    post2018: bool,
+    na_like: Sequence[str] = ("NA", "N/A", "Exempt", "Not Applicable"),
+) -> pd.DataFrame:
+    """Normalize NA-like tokens and prefer CFPB derived demographic fields."""
+
+    out = replace_na_like_values(df, df.columns, na_like)
+    if post2018:
+        for raw_column, derived_column in (
+            ("race", "derived_race"),
+            ("ethnicity", "derived_ethnicity"),
+            ("sex", "derived_sex"),
+        ):
+            if derived_column in out.columns:
+                out[raw_column] = out[derived_column]
+    return out
+
+
+def harmonize_census_tract(
+    df: pd.DataFrame,
+    crosswalk: Optional[pd.DataFrame] = None,
+    tract_col: str = "census_tract",
+    year_col: str = "activity_year",
+    to_vintage: Optional[int] = 2020,
+    crosswalk_cols: Tuple[str, str] = ("tract_src", "tract_2020"),
+) -> pd.DataFrame:
+    """Map tract identifiers to a single geographic vintage when possible."""
+
+    if crosswalk is None or tract_col not in df.columns or year_col not in df.columns:
+        return df.copy()
+
+    cw = crosswalk.copy()
+    src_col, dst_col = crosswalk_cols
+
+    if src_col not in cw.columns or dst_col not in cw.columns:
+        return df.copy()
+
+    if "target_year" in cw.columns and to_vintage is not None:
+        cw = cw[cw["target_year"] == to_vintage]
+
+    right_columns = [src_col, dst_col]
+    merge_columns = [src_col]
+    left_on = [tract_col]
+    if "year" in cw.columns:
+        merge_columns.append("year")
+        left_on.append(year_col)
+        right_columns.append("year")
+    if "target_year" in cw.columns:
+        right_columns.append("target_year")
+
+    merged = df.merge(
+        cw[right_columns],
+        left_on=left_on,
+        right_on=merge_columns,
+        how="left",
+    )
+
+    merged[tract_col] = merged.get(dst_col).combine_first(merged[tract_col])
+    merged.drop(
+        columns=[src_col, dst_col, "year", "target_year"], errors="ignore", inplace=True
+    )
+    return merged
+
+
+def apply_plausibility_filters(
+    df: pd.DataFrame,
+    bounds: Optional[dict[str, Tuple[Optional[float], Optional[float]]]] = None,
+) -> pd.DataFrame:
+    """Drop observations that fall outside configured plausibility bounds."""
+
+    default_bounds: dict[str, Tuple[Optional[float], Optional[float]]] = {
+        "ltv": (0, 200),
+        "credit_score": (500, 820),
+        "dti": (0, 250),
+        "applicant_income": (0, 1_000_000),
+        "loan_amount": (0, 1_500_000),
+    }
+    if bounds:
+        default_bounds.update(bounds)
+
+    out = df.copy()
+    mask = pd.Series(True, index=out.index)
+    for column, (lower, upper) in default_bounds.items():
+        if column not in out.columns:
+            continue
+        series = pd.to_numeric(out[column], errors="coerce")
+        if lower is not None:
+            mask &= series.isna() | (series >= lower)
+        if upper is not None:
+            mask &= series.isna() | (series <= upper)
+
+    filtered = out.loc[mask].copy()
+    filtered.attrs["plausibility_dropped"] = len(out) - len(filtered)
+    return filtered
+
+
+def clean_rate_spread(
+    df: pd.DataFrame,
+    post2018: bool,
+    rate_spread_col: str = "rate_spread",
+) -> pd.DataFrame:
+    """Coerce rate spread to numeric and drop implausible extreme values."""
+
+    out = df.copy()
+    if rate_spread_col in out.columns:
+        out[rate_spread_col] = pd.to_numeric(out[rate_spread_col], errors="coerce")
+        max_abs = 20 if post2018 else 20
+        out.loc[out[rate_spread_col].abs() > max_abs, rate_spread_col] = pd.NA
+    return out
+
+
+def flag_outliers_basic(
+    df: pd.DataFrame,
+    columns: Sequence[str] = ("interest_rate", "rate_spread", "total_loan_costs"),
+    z_threshold: float = 6.0,
+) -> pd.DataFrame:
+    """Create boolean outlier flags for the specified ``columns``."""
+
+    out = df.copy()
+    for column in columns:
+        if column not in out.columns:
+            continue
+        values = pd.to_numeric(out[column], errors="coerce")
+        mean = values.mean(skipna=True)
+        std = values.std(skipna=True)
+        if pd.notna(std) and std > 0:
+            out[f"outlier_{column}"] = (values - mean).abs() > z_threshold * std
+    return out
+
+
+def clean_hmda(
+    df: pd.DataFrame,
+    post2018: bool,
+    bounds: Optional[dict[str, Tuple[Optional[float], Optional[float]]]] = None,
+    crosswalk: Optional[pd.DataFrame] = None,
+) -> pd.DataFrame:
+    """Run the full HMDA cleaning pipeline using the helper utilities."""
+
+    out = add_identity_keys(df, post2018=post2018)
+    out = deduplicate_records(out, keep="last")
+    out = standardize_schema(out, post2018=post2018)
+    out = normalize_missing_and_derived(out, post2018=post2018)
+    out = harmonize_census_tract(out, crosswalk=crosswalk)
+    out = apply_plausibility_filters(out, bounds=bounds)
+    out = clean_rate_spread(out, post2018=post2018)
+    out = flag_outliers_basic(out)
+    return out
