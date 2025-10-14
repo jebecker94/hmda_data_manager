@@ -12,6 +12,7 @@ from selenium.webdriver.chrome.options import Options
 import re
 from email.utils import parsedate_to_datetime
 from datetime import datetime
+import polars as pl
 
 
 logger = logging.getLogger(__name__)
@@ -251,39 +252,40 @@ def download_zip_files_from_url(
 
 # Main routine
 if __name__ == "__main__":
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
+
     # Base URLs.
     mlar_base_url = "https://ffiec.cfpb.gov/data-publication/modified-lar"
-    snapshot_base_url = (
-        "https://ffiec.cfpb.gov/data-publication/snapshot-national-loan-level-dataset"
-    )
-    one_year_base_url = (
-        "https://ffiec.cfpb.gov/data-publication/one-year-national-loan-level-dataset"
-    )
-    three_year_base_url = (
-        "https://ffiec.cfpb.gov/data-publication/three-year-national-loan-level-dataset"
-    )
+    snapshot_base_url = "https://ffiec.cfpb.gov/data-publication/snapshot-national-loan-level-dataset"
+    one_year_base_url = "https://ffiec.cfpb.gov/data-publication/one-year-national-loan-level-dataset"
+    three_year_base_url = "https://ffiec.cfpb.gov/data-publication/three-year-national-loan-level-dataset"
     historical_url = "https://www.consumerfinance.gov/data-research/hmda/historic-data/?geo=nationwide&records=all-records&field_descriptions=codes"
 
-    # Download parameters.
-    min_static_year = 2024
+    # Download parameters
+    download_mlar = False
+    min_static_year = 2018
     max_static_year = 2024
     download_folder = "./data/raw"  # Destination folder for downloads.
 
-    # Download static files.
-    for year in range(min_static_year, max_static_year + 1):
-        for base_url in [snapshot_base_url, one_year_base_url, three_year_base_url]:
-            target_url = base_url + f"/{year}"
-            download_zip_files_from_url(target_url, download_folder)
+    # # Download static files.
+    # for year in range(min_static_year, max_static_year + 1):
+    #     for base_url in [snapshot_base_url, one_year_base_url, three_year_base_url]:
+    #         target_url = base_url + f"/{year}"
+    #         download_zip_files_from_url(target_url, download_folder)
 
-    # Download MLAR files (currently excludes headers).
-    for year in range(2018, 2024 + 1):
-        target_url = mlar_base_url + f"/{year}"
-        download_zip_files_from_url(target_url, download_folder, download_all=True)
+    # # Download MLAR files (currently excludes headers)
+    # if download_mlar:
+    #     for year in range(min_static_year, max_static_year + 1):
+    #         target_url = mlar_base_url + f"/{year}"
+    #         download_zip_files_from_url(target_url, download_folder, download_all=True)
 
-    # Download historical files (2007–2017).
-    target_url = historical_url
-    download_zip_files_from_url(target_url, download_folder, download_all=True)
+    # # Download historical files (2007–2017).
+    # target_url = historical_url
+    # download_zip_files_from_url(target_url, download_folder, download_all=True)
+
+    # Update file list
+    update_file_list(Path('./data').resolve())
