@@ -744,7 +744,12 @@ def save_file_to_stata(file: Path) -> None:
 
 
 # Prepare for Stata
-def prepare_hmda_for_stata(df, labels_folder=None):
+def prepare_hmda_for_stata(
+    df,
+    labels_folder=None,
+    value_label_file=None,
+    variable_label_file=None,
+    ):
     """
     Create variable and value labels to save DTA files for stata.
 
@@ -764,13 +769,21 @@ def prepare_hmda_for_stata(df, labels_folder=None):
 
     """
 
+    if labels_folder is None:
+        labels_folder = Path(__file__).parent / "labels"
+    labels_folder.mkdir(parents=True, exist_ok=True)
+
+    # Set Value and Variable Label Files if missing
+    if value_label_file is None:
+        value_label_file = labels_folder / "hmda_value_labels.txt"
+    if variable_label_file is None:
+        variable_label_file = labels_folder / "hmda_variable_labels.txt"
+
     # Read Value Labels
-    value_label_file = labels_folder / "loans/hmda_value_labels.txt"
     with open(value_label_file, "r") as f:
         value_labels = ast.literal_eval(f.read())
 
     # Read Variable Labels
-    variable_label_file = labels_folder / "loans/hmda_variable_labels.txt"
     with open(variable_label_file, "r") as f:
         variable_labels = ast.literal_eval(f.read())
 
