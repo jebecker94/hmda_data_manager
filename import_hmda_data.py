@@ -457,7 +457,7 @@ def save_to_dataset(
     df = pl.concat(df, how='diagonal_relaxed')
     df.sink_parquet(
         pl.PartitionByKey(
-            save_folder / "{key[0].name}={key[0].value}/{key[1].name}={key[1].value}/000.parquet",
+            save_folder,
             by=[pl.col('activity_year'), pl.col('file_type')],
             include_key=True,
         ),
@@ -512,10 +512,18 @@ if __name__ == "__main__":
     #     overwrite=True,
     # )
 
-    # Save to Dataset
-    save_to_dataset(
-        CLEAN_DIR / 'loans',
-        PROJECT_DIR / "data/database/loans/post2018",
-        min_year=2018,
-        max_year=2024,
-    )
+    # # Save to Dataset
+    # save_to_dataset(
+    #     CLEAN_DIR / 'loans',
+    #     PROJECT_DIR / "data/database/loans/2007-2017",
+    #     min_year=2007,
+    #     max_year=2017,
+    # )
+    
+    # # Save to Dataset
+    # save_to_dataset(
+    #     CLEAN_DIR / 'loans',
+    #     PROJECT_DIR / "data/database/loans/post2018",
+    #     min_year=2018,
+    #     max_year=2024,
+    # )
