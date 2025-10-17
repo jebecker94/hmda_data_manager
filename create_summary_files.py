@@ -1,6 +1,9 @@
 # Import required libraries
 from pathlib import Path
-
+import config
+import pandas as pd
+import numpy as np
+from typing import Iterable
 
 #%% Helper functions
 def _merge_panel_ts_post2018(panel: pd.DataFrame, ts: pd.DataFrame) -> pd.DataFrame:
@@ -189,4 +192,15 @@ def combine_lenders_panel_ts_pre2018(
 
 ## Main routine
 if __name__ == "__main__":
-    pass
+    
+    # Define Folder Paths
+    RAW_DIR = config.RAW_DIR
+    CLEAN_DIR = config.CLEAN_DIR
+    PROJECT_DIR = config.PROJECT_DIR
+
+    # Combine Lender Files
+    ts_folder = CLEAN_DIR / "transmissal_series"
+    panel_folder = CLEAN_DIR / "panel"
+    save_folder = PROJECT_DIR / "data"
+    # combine_lenders_panel_ts_pre2018(panel_folder, ts_folder, save_folder, min_year=2007, max_year=2017)
+    # combine_lenders_panel_ts_post2018(panel_folder, ts_folder, save_folder, min_year=2018, max_year=2023)

@@ -504,25 +504,18 @@ if __name__ == "__main__":
         max_year=MAX_YEAR
     )
 
-    # Clean loans data
-    clean_hmda_post_2017(
-        CLEAN_DIR / "loans",
-        min_year=MIN_YEAR,
-        max_year=MAX_YEAR,
-        overwrite=True,
-    )
-
-    # Combine Lender Files
-    ts_folder = CLEAN_DIR / "transmissal_series"
-    panel_folder = CLEAN_DIR / "panel"
-    save_folder = PROJECT_DIR / "data"
-    # combine_lenders_panel_ts_pre2018(panel_folder, ts_folder, save_folder, min_year=2007, max_year=2017)
-    # combine_lenders_panel_ts_post2018(panel_folder, ts_folder, save_folder, min_year=2018, max_year=2023)
-
-    # # Save to Dataset
-    # save_to_dataset(
-    #     CLEAN_DIR / 'loans',
-    #     PROJECT_DIR / "data/database/loans",
-    #     min_year=2018,
-    #     max_year=2024,
+    # # Clean loans data
+    # clean_hmda_post_2017(
+    #     CLEAN_DIR / "loans",
+    #     min_year=MIN_YEAR,
+    #     max_year=MAX_YEAR,
+    #     overwrite=True,
     # )
+
+    # Save to Dataset
+    save_to_dataset(
+        CLEAN_DIR / 'loans',
+        PROJECT_DIR / "data/database/loans/post2018",
+        min_year=2018,
+        max_year=2024,
+    )
