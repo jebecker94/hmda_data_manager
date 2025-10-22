@@ -39,6 +39,24 @@ Comprehensive workflow for importing and processing post-2018 HMDA data using th
 python examples/example_import_workflow_post2018.py
 ```
 
+#### `example_create_summaries.py` ⭐ **NEW**
+Creates combined lender datasets by merging Panel and Transmittal Sheet data for both pre-2018 and post-2018 periods. Essential for lender-level analysis.
+
+**Features:**
+- Combines post-2018 Panel and Transmittal Sheet data  
+- Combines pre-2018 Panel and Transmittal Sheet data (2007-2017)
+- Creates both CSV and Parquet outputs
+- Data validation and quality checks
+- Summary statistics and reporting
+- Requirements checking functionality
+
+**Prerequisites:** Run import workflows first to create Panel and TS data files.
+
+**Usage:**
+```bash
+python examples/example_create_summaries.py
+```
+
 ### Data Processing Examples
 
 #### `example_load_dc_purchases.py`
@@ -104,7 +122,12 @@ Here's a typical workflow using the examples:
    python examples/example_import_workflow_post2018.py
    ```
 
-3. **Query the database efficiently:**
+3. **Create lender summaries:**
+   ```bash
+   python examples/example_create_summaries.py
+   ```
+
+4. **Query the database efficiently:**
    ```bash
    python examples/example_load_dc_purchases.py
    ```
@@ -132,6 +155,6 @@ If you're migrating from the old script-based approach:
 |------------|-------------|-------|
 | `download_hmda_data.py` | `example_download_hmda_data.py` | ✅ Complete |
 | `import_hmda_data.py` | `example_import_workflow_post2018.py` | ✅ Complete (post-2018) |
-| `create_summary_files.py` | `example_create_summaries.py` | 🚧 Coming soon |
+| `create_summary_files.py` | `example_create_summaries.py` | ✅ Complete |
 
 The new examples use the modular package structure and provide both beginner-friendly convenience functions and advanced customization options.
