@@ -1,21 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Oct 07 07:00:00 2025
-@author: Jonathan E. Becker
+Example: Loading DC Purchase Data from Hive Database
+
+This example demonstrates how to efficiently query the hive-partitioned HMDA 
+database using Polars SQL interface.
+
+Prerequisites:
+1. Run example_import_workflow_post2018.py first to create the database
+2. Ensure you have post-2018 HMDA data available
+
 """
 
 # Import Packages
-import sys
-from pathlib import Path
 import polars as pl
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-import config
+from hmda_data_manager.core import DATA_DIR
 
-# Set Data Directory
-DATA_DIR = config.DATA_DIR
-
-# Read from database
-df = pl.scan_parquet(DATA_DIR / "database/loans")
+# Read from hive-partitioned database (created by example_import_workflow_post2018.py)
+# This demonstrates efficient querying of the partitioned dataset
+df = pl.scan_parquet(DATA_DIR / "database/loans/post2018")
 
 # Select DC Purchases with SQL
 df = df.sql('''

@@ -1,0 +1,15 @@
+bs4>=0.0.2
+datetime>=5.5
+ipykernel>=6.29.5
+matplotlib>=3.10.1
+pandas>=2.2.3
+pip>=25.2
+polars>=1.26.0
+pyarrow>=19.0.1
+pyod>=2.0.4
+python-decouple>=3.8
+ruff>=0.11.3
+scipy>=1.15.2
+selenium>=4.32.0
+six>=1.17.0
+webdriver-manager>=4.0.2

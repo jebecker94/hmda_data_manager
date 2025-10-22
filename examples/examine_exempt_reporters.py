@@ -2,24 +2,16 @@
 import logging
 
 import polars as pl
-import HMDALoader
+from hmda_data_manager.utils import get_file_schema
+from hmda_data_manager.core import DATA_DIR
 
 
 logger = logging.getLogger(__name__)
 
 # Load Dataset
-filters = [
-    ("action_taken", "==", 1)
-]  # ('state_code','==','DC'), ('loan_type','==',1),('loan_purpose','==',1),('loan_term','==','360')
-filters = [pl.col("action_taken") == 1]
-dataset = HMDALoader.load_hmda_file(
-    data_folder="data/clean",
-    file_type="lar",
-    min_year=2024,
-    max_year=2024,
-    engine="polars",
-    filters=filters,
-)
+# Note: Using direct parquet reading - replace path with your actual clean data location
+data_path = DATA_DIR / "clean" / "loans" / "2024_public_lar.parquet"
+dataset = pl.scan_parquet(data_path)
 
 # Polars Filters
 dataset = dataset.filter([pl.col("action_taken") == 1])

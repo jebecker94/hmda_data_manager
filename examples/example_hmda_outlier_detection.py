@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import matplotlib.pyplot as plt
-import config
-import HMDALoader
+from hmda_data_manager.core import DATA_DIR
 from scipy import stats
 from pyod.models.knn import KNN
 from pathlib import Path
@@ -14,20 +13,13 @@ os.chdir(Path(__file__).resolve().parent.parent)
 OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# Set Folder Paths
-DATA_DIR = config.DATA_DIR
-
 ## Plot Lender Averages
 for column in ["income", "loan_amount", "interest_rate"]:
     columns = ["activity_year", "lei", column]
-    filters = [("action_taken", "==", 1)]
-    files = HMDALoader.get_hmda_files(
-        DATA_DIR / "clean",
-        file_type="lar",
-        min_year=2018,
-        max_year=2023,
-        extension="parquet",
-    )
+    # Get list of clean parquet files for 2018-2023
+    clean_dir = DATA_DIR / "clean" / "loans"
+    files = [clean_dir / f"{year}_public_lar.parquet" for year in range(2018, 2024) 
+             if (clean_dir / f"{year}_public_lar.parquet").exists()]
     df = []
     for file in files:
         df_a = pl.read_parquet(file, columns=columns)
@@ -77,14 +69,10 @@ columns = [
     "loan_type",
     "loan_purpose",
 ]
-filters = [("action_taken", "==", 1), ("state_code", "==", "DC")]
-files = HMDALoader.get_hmda_files(
-    DATA_DIR / "clean",
-    file_type="lar",
-    min_year=2018,
-    max_year=2023,
-    extension="parquet",
-)
+# Get list of clean parquet files for 2018-2023
+clean_dir = DATA_DIR / "clean" / "loans"
+files = [clean_dir / f"{year}_public_lar.parquet" for year in range(2018, 2024) 
+         if (clean_dir / f"{year}_public_lar.parquet").exists()]
 df = []
 for file in files:
     df_a = pl.read_parquet(file, columns=columns)
