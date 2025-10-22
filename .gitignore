@@ -4,6 +4,7 @@
 # Dependencies
 __pycache__/
 .venv
+.ruff_cache/
 
 # Logs
 *.log
