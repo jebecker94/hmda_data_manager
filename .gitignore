@@ -9,10 +9,9 @@ __pycache__/
 *.log
 
 # Data and Output Folders
-data/*
-output/*
-data
-output
-deprecated
-deprecated/*
-exploratory_functions
+data/
+output/
+deprecated/
+
+# Cursor
+.cursor/
