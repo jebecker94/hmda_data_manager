@@ -8,8 +8,11 @@ management, and data transformations that are consistent across HMDA formats.
 
 import logging
 import time
+from collections.abc import Sequence
 from pathlib import Path
+
 import polars as pl
+
 from ...utils.support import get_delimiter, get_file_schema, unzip_hmda_file
 
 
@@ -29,7 +32,7 @@ DERIVED_COLUMNS = [
 ]
 
 POST_2017_TRACT_COLUMNS = [
-    "tract_population", 
+    "tract_population",
     "tract_minority_population_percent",
     "ffiec_msa_md_median_family_income",
     "tract_to_msa_income_percentage",
@@ -45,14 +48,27 @@ PRE2018_TS_DROP_COLUMNS = [
 ]
 
 
+FLOAT_DTYPES = {pl.Float32, pl.Float64}
+INTEGER_DTYPES = {
+    pl.Int8,
+    pl.Int16,
+    pl.Int32,
+    pl.Int64,
+    pl.UInt8,
+    pl.UInt16,
+    pl.UInt32,
+    pl.UInt64,
+}
+
+
 def normalized_file_stem(stem: str) -> str:
     """Remove common suffixes from extracted archive names.
-    
+
     Parameters
     ----------
     stem : str
         File stem (name without extension)
-        
+
     Returns
     -------
     str
@@ -67,14 +83,14 @@ def normalized_file_stem(stem: str) -> str:
 
 def should_process_output(path: Path, replace: bool) -> bool:
     """Return ``True`` when the target path should be generated.
-    
+
     Parameters
     ----------
     path : Path
         Target output file path
     replace : bool
         Whether to replace existing files
-        
+
     Returns
     -------
     bool
@@ -87,7 +103,7 @@ def limit_schema_to_available_columns(
     raw_file: Path, delimiter: str, schema: dict[str, pl.DataType]
 ) -> dict[str, pl.DataType]:
     """Restrict a schema to the columns available in a delimited file.
-    
+
     Parameters
     ----------
     raw_file : Path
@@ -96,13 +112,15 @@ def limit_schema_to_available_columns(
         Column delimiter character
     schema : dict[str, pl.DataType]
         Full schema dictionary
-        
+
     Returns
     -------
     dict[str, pl.DataType]
         Schema restricted to available columns
     """
-    csv_columns = pl.read_csv(raw_file, separator=delimiter, n_rows=0, ignore_errors=True).columns
+    csv_columns = pl.read_csv(
+        raw_file, separator=delimiter, n_rows=0, ignore_errors=True
+    ).columns
     logger.debug("CSV columns: %s", csv_columns)
     return {column: schema[column] for column in csv_columns if column in schema}
 
@@ -149,12 +167,12 @@ def get_file_type_code(file_name: Path | str) -> str:
 
 def format_census_tract_lazy(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Standardize the census tract column within a lazy frame.
-    
+
     Parameters
     ----------
     lf : pl.LazyFrame
         Input lazy frame with census tract column
-        
+
     Returns
     -------
     pl.LazyFrame
@@ -170,6 +188,58 @@ def format_census_tract_lazy(lf: pl.LazyFrame) -> pl.LazyFrame:
     )
 
 
+def _integer_like_float_columns(
+    lf: pl.LazyFrame, float_columns: Sequence[str]
+) -> list[str]:
+    """Return float columns whose non-null values are all integers."""
+
+    if not float_columns:
+        return []
+
+    checks = [
+        (
+            pl.when(pl.col(column).is_null())
+            .then(True)
+            .otherwise(
+                pl.when(pl.col(column).is_finite())
+                .then(pl.col(column).round(0) == pl.col(column))
+                .otherwise(False)
+            )
+            .all()
+            .alias(column)
+        )
+        for column in float_columns
+    ]
+
+    if not checks:
+        return []
+
+    result = lf.select(checks).collect(streaming=True)
+    return [column for column in float_columns if bool(result[column][0])]
+
+
+def cast_integer_like_floats(
+    lf: pl.LazyFrame, schema: dict[str, pl.DataType]
+) -> pl.LazyFrame:
+    """Cast float columns with integer-only values to integer dtypes."""
+
+    float_columns = [
+        column for column, dtype in lf.schema.items() if dtype in FLOAT_DTYPES
+    ]
+    integer_like_columns = _integer_like_float_columns(lf, float_columns)
+    if not integer_like_columns:
+        return lf
+
+    casts = []
+    for column in integer_like_columns:
+        target_dtype = schema.get(column, pl.Int64)
+        if target_dtype not in INTEGER_DTYPES:
+            target_dtype = pl.Int64
+        casts.append(pl.col(column).cast(target_dtype, strict=False).alias(column))
+
+    return lf.with_columns(casts)
+
+
 def build_hmda_lazyframe(
     raw_file: Path,
     delimiter: str,
@@ -180,7 +250,7 @@ def build_hmda_lazyframe(
     add_file_type: bool,
 ) -> pl.LazyFrame:
     """Create a ``polars`` lazy frame for a raw HMDA delimited file.
-    
+
     Parameters
     ----------
     raw_file : Path
@@ -197,16 +267,15 @@ def build_hmda_lazyframe(
         Path to the original archive file
     add_file_type : bool
         Whether to add file type column
-        
+
     Returns
     -------
     pl.LazyFrame
         Configured lazy frame for the HMDA file
     """
     if (year < 2017) or (not add_hmda_index):
-        return pl.scan_csv(
-            raw_file, separator=delimiter, low_memory=True, schema=schema
-        )
+        lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema)
+        return cast_integer_like_floats(lf, schema)
 
     # Scan CSV File
     lf = pl.scan_csv(
@@ -224,9 +293,10 @@ def build_hmda_lazyframe(
     if add_hmda_index:
         # Import locally to avoid circular imports
         from .post2018 import append_hmda_index
+
         lf = append_hmda_index(lf, year, file_type_code)
 
-    return lf
+    return cast_integer_like_floats(lf, schema)
 
 
 def process_hmda_archive(
@@ -239,7 +309,7 @@ def process_hmda_archive(
     add_file_type: bool,
 ) -> None:
     """Read, clean and persist a single HMDA archive.
-    
+
     Parameters
     ----------
     archive_path : Path
@@ -289,7 +359,7 @@ def save_to_dataset(
     max_year: int = 2024,
 ):
     """Save HMDA data to dataset with Hive Partitioning.
-    
+
     Parameters
     ----------
     data_folder : Path
@@ -310,12 +380,12 @@ def save_to_dataset(
         for file in data_folder.glob(f"*{year}*.parquet"):
             df_a = pl.scan_parquet(file)
             df.append(df_a)
-    df = pl.concat(df, how='diagonal_relaxed')
-    year_column = 'activity_year' if 'activity_year' in df.columns else 'as_of_year'
+    df = pl.concat(df, how="diagonal_relaxed")
+    year_column = "activity_year" if "activity_year" in df.columns else "as_of_year"
     df.sink_parquet(
         pl.PartitionByKey(
             save_folder,
-            by=[pl.col(year_column), pl.col('file_type')],
+            by=[pl.col(year_column), pl.col("file_type")],
             include_key=True,
         ),
         mkdir=True,
