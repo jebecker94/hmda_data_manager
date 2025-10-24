@@ -16,17 +16,243 @@ This module is relatively stable since the 2007-2017 data format is finalized.
 """
 
 import logging
+import time
+from collections.abc import Sequence
 from pathlib import Path
-from ...utils.support import destring_hmda_cols_2007_2017
-from .common import (
-    normalized_file_stem,
-    should_process_output,
-    process_hmda_archive,
-    PRE2018_TS_DROP_COLUMNS,
-)
+import polars as pl
+from ...utils.support import destring_hmda_cols_2007_2017, get_delimiter, get_file_schema, unzip_hmda_file
 
 
 logger = logging.getLogger(__name__)
+
+
+# Constants specific to 2007-2017 data
+PRE2018_TS_DROP_COLUMNS = [
+    "Respondent Name (Panel)",
+    "Respondent City (Panel)",
+    "Respondent State (Panel)",
+]
+
+FLOAT_DTYPES = {pl.Float32, pl.Float64}
+INTEGER_DTYPES = {
+    pl.Int8,
+    pl.Int16,
+    pl.Int32,
+    pl.Int64,
+    pl.UInt8,
+    pl.UInt16,
+    pl.UInt32,
+    pl.UInt64,
+}
+
+
+def normalized_file_stem(stem: str) -> str:
+    """Remove common suffixes from extracted archive names.
+
+    Parameters
+    ----------
+    stem : str
+        File stem (name without extension)
+
+    Returns
+    -------
+    str
+        Normalized file stem with common suffixes removed
+    """
+    if stem.endswith("_csv"):
+        stem = stem[:-4]
+    if stem.endswith("_pipe"):
+        stem = stem[:-5]
+    return stem
+
+
+def should_process_output(path: Path, replace: bool) -> bool:
+    """Return ``True`` when the target path should be generated.
+
+    Parameters
+    ----------
+    path : Path
+        Target output file path
+    replace : bool
+        Whether to replace existing files
+
+    Returns
+    -------
+    bool
+        True if file should be processed
+    """
+    return replace or not path.exists()
+
+
+def limit_schema_to_available_columns(
+    raw_file: Path, delimiter: str, schema: dict[str, pl.DataType | str]
+) -> dict[str, pl.DataType | str]:
+    """Restrict a schema to the columns available in a delimited file.
+
+    Parameters
+    ----------
+    raw_file : Path
+        Path to the raw CSV/delimited file
+    delimiter : str
+        Column delimiter character
+    schema : dict[str, pl.DataType | str]
+        Full schema dictionary
+
+    Returns
+    -------
+    dict[str, pl.DataType | str]
+        Schema restricted to available columns
+    """
+    csv_columns = pl.read_csv(
+        raw_file, separator=delimiter, n_rows=0, ignore_errors=True
+    ).columns
+    logger.debug("CSV columns: %s", csv_columns)
+    return {column: schema[column] for column in csv_columns if column in schema}
+
+
+def _integer_like_float_columns(
+    lf: pl.LazyFrame, float_columns: Sequence[str]
+) -> list[str]:
+    """Return float columns whose non-null values are all integers."""
+
+    if not float_columns:
+        return []
+
+    checks = [
+        (
+            pl.when(pl.col(column).is_null())
+            .then(True)
+            .otherwise(
+                pl.when(pl.col(column).is_finite())
+                .then(pl.col(column).round(0) == pl.col(column))
+                .otherwise(False)
+            )
+            .all()
+            .alias(column)
+        )
+        for column in float_columns
+    ]
+
+    if not checks:
+        return []
+
+    result = lf.select(checks).collect()
+    return [column for column in float_columns if bool(result[column][0])]
+
+
+def cast_integer_like_floats(
+    lf: pl.LazyFrame, schema: dict[str, pl.DataType | str]
+) -> pl.LazyFrame:
+    """Cast float columns with integer-only values to integer dtypes."""
+
+    float_columns = [
+        column for column, dtype in lf.schema.items() if dtype in FLOAT_DTYPES
+    ]
+    integer_like_columns = _integer_like_float_columns(lf, float_columns)
+    if not integer_like_columns:
+        return lf
+
+    casts = []
+    for column in integer_like_columns:
+        target_dtype = schema.get(column, pl.Int64)
+        if target_dtype not in INTEGER_DTYPES:
+            target_dtype = pl.Int64
+        casts.append(pl.col(column).cast(target_dtype, strict=False).alias(column))  # type: ignore[arg-type]
+
+    return lf.with_columns(casts)
+
+
+def build_hmda_lazyframe(
+    raw_file: Path,
+    delimiter: str,
+    schema: dict[str, pl.DataType | str],
+    year: int,
+    add_hmda_index: bool,
+    archive_path: Path,
+    add_file_type: bool,
+) -> pl.LazyFrame:
+    """Create a ``polars`` lazy frame for a raw HMDA delimited file.
+
+    Parameters
+    ----------
+    raw_file : Path
+        Path to the extracted delimited file
+    delimiter : str
+        Column delimiter character
+    schema : dict[str, pl.DataType]
+        Column schema dictionary
+    year : int
+        Data year
+    add_hmda_index : bool
+        Whether to add HMDA index column (not used for 2007-2017)
+    archive_path : Path
+        Path to the original archive file
+    add_file_type : bool
+        Whether to add file type column (not used for 2007-2017)
+
+    Returns
+    -------
+    pl.LazyFrame
+        Configured lazy frame for the HMDA file
+    """
+    # For 2007-2017, we don't add HMDA index or file type
+    lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema)  # type: ignore[arg-type]
+    return cast_integer_like_floats(lf, schema)
+
+
+def process_hmda_archive(
+    archive_path: Path,
+    save_path: Path,
+    schema_file: Path,
+    year: int,
+    remove_raw_file: bool,
+    add_hmda_index: bool,
+    add_file_type: bool,
+) -> None:
+    """Read, clean and persist a single HMDA archive.
+
+    Parameters
+    ----------
+    archive_path : Path
+        Path to the zip archive
+    save_path : Path
+        Path where processed file will be saved
+    schema_file : Path
+        Path to the HTML schema file
+    year : int
+        Data year
+    remove_raw_file : bool
+        Whether to remove extracted file after processing
+    add_hmda_index : bool
+        Whether to add HMDA index column (ignored for 2007-2017)
+    add_file_type : bool
+        Whether to add file type column (ignored for 2007-2017)
+    """
+    raw_file_path = Path(unzip_hmda_file(archive_path, archive_path.parent))
+    try:
+        delimiter = get_delimiter(raw_file_path, bytes=16000)
+        schema = get_file_schema(schema_file=schema_file, schema_type="polars")
+        if not isinstance(schema, dict):
+            raise ValueError(f"Expected dict schema, got {type(schema)}")
+        limited_schema = limit_schema_to_available_columns(
+            raw_file_path,
+            delimiter,
+            schema,  # type: ignore[arg-type]
+        )
+        lf = build_hmda_lazyframe(
+            raw_file=raw_file_path,
+            delimiter=delimiter,
+            schema=limited_schema,
+            year=year,
+            add_hmda_index=False,  # Always False for 2007-2017
+            add_file_type=False,   # Always False for 2007-2017
+            archive_path=archive_path,
+        )
+        lf.sink_parquet(save_path)
+    finally:
+        if remove_raw_file:
+            time.sleep(1)
+            raw_file_path.unlink(missing_ok=True)
 
 
 def import_hmda_2007_2017(
@@ -42,7 +268,7 @@ def import_hmda_2007_2017(
     Import and clean HMDA data for 2007-2017.
 
     This function processes HMDA zip archives from the standardized period (2007-2017).
-    Unlike post-2018 data, these files do not receive HMDA index values or file type codes.
+    Unlike post2018 data, these files do not receive HMDA index values or file type codes.
 
     Parameters
     ----------

@@ -20,7 +20,7 @@ Main Modules
 Example Usage
 -------------
 >>> # Import and download functions
->>> from hmda_data_manager.core import import_hmda_post_2018, download_hmda_files
+>>> from hmda_data_manager.core import import_hmda_post2018, download_hmda_files
 >>> from hmda_data_manager.utils import get_file_schema, combine_lenders_panel_ts_post2018
 >>> from hmda_data_manager.schemas import get_schema_path
 
@@ -29,13 +29,13 @@ Example Usage
 
 >>> # Import data using schema
 >>> schema_file = get_schema_path("hmda_lar_schema_post2018")
->>> import_hmda_post_2018(data_folder, save_folder, schema_file, 2020, 2024)
+>>> import_hmda_post2018(data_folder, save_folder, schema_file, 2020, 2024, clean=True)
 
 For detailed examples, see the examples/ directory in the repository.
 
 Notes
 -----
-The HMDAIndex variable is automatically created for post-2018 data to provide
+The HMDAIndex variable is automatically created for post2018 data to provide
 unique identifiers across HMDA releases. Format: YYYYt_######### where YYYY is
 the year, t is the file type code, and # is the zero-padded row number.
 

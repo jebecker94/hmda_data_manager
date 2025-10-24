@@ -24,7 +24,7 @@ from .support import (
     replace_csv_column_names,
     destring_hmda_cols_pre2007,
     destring_hmda_cols_2007_2017,
-    destring_hmda_cols_after_2018,
+    destring_hmda_cols_post2018,
     clean_hmda,
     clean_hmda_polars,
     add_identity_keys,
@@ -53,7 +53,7 @@ __all__ = [
     "rename_hmda_columns",
     "destring_hmda_cols_pre2007",
     "destring_hmda_cols_2007_2017", 
-    "destring_hmda_cols_after_2018",
+    "destring_hmda_cols_post2018",
     
     # Data cleaning pipelines
     "clean_hmda",

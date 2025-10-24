@@ -24,8 +24,7 @@ from .config import PROJECT_DIR, DATA_DIR, RAW_DIR, CLEAN_DIR
 from .import_data import (
     import_hmda_pre_2007,
     import_hmda_2007_2017,
-    import_hmda_post_2018,
-    clean_hmda_post_2017,
+    import_hmda_post2018,
     save_to_dataset,
     import_hmda_data,
 )
@@ -47,8 +46,7 @@ __all__ = [
     # Import functions
     "import_hmda_pre_2007",
     "import_hmda_2007_2017",
-    "import_hmda_post_2018",
-    "clean_hmda_post_2017",
+    "import_hmda_post2018",
     "save_to_dataset",
     "import_hmda_data",
     

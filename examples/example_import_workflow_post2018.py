@@ -14,8 +14,6 @@ The workflow includes:
 6. Basic data validation and summary statistics
 7. Creating hive-partitioned database for efficient querying
 
-Author: Jonathan E. Becker
-Created: October 2025
 """
 
 import logging
@@ -24,15 +22,11 @@ from pathlib import Path
 
 # Import the new modular functions
 from hmda_data_manager.core import (
-    import_hmda_post_2018, 
+    import_hmda_post2018, 
     save_to_dataset,
     DATA_DIR, 
     RAW_DIR, 
     CLEAN_DIR
-)
-from hmda_data_manager.utils import (
-    get_file_schema,
-    combine_lenders_panel_ts_post2018
 )
 from hmda_data_manager.schemas import get_schema_path
 
@@ -56,8 +50,8 @@ def main():
     logger.info("1. Setting up configuration...")
     
     # Define years to process (adjust as needed)
-    min_year = 2018
-    max_year = 2024
+    min_year = 2019
+    max_year = 2019
     
     # Define folders
     raw_folder = RAW_DIR
@@ -95,21 +89,19 @@ def main():
     # =============================================================================
     # 3. Import LAR (Loan-Level) Data
     # =============================================================================
-    
     logger.info("3. Importing LAR (loan-level) data...")
     
     try:
-        # Import post-2018 LAR data
-        import_hmda_post_2018(
+        # Import post2018 LAR data with cleaning enabled
+        import_hmda_post2018(
             data_folder=raw_folder / "loans",
             save_folder=clean_folder / "loans",
             schema_file=lar_schema_path,
             min_year=min_year,
             max_year=max_year,
-            # file_types=["lar"],  # Only process LAR files
             add_hmda_index=True,
             add_file_type=True,
-            # save_format="parquet"
+            clean=True,  # Enable cleaning transformations
         )
         
         logger.info("  ✅ LAR data import completed successfully")
@@ -127,12 +119,13 @@ def main():
     # =============================================================================
     # 4. Import Panel Data (Lender Information) 
     # =============================================================================
+    stop
     
     logger.info("4. Importing Panel (lender) data...")
     
     try:
-        # Import post-2018 Panel data
-        import_hmda_post_2018(
+        # Import post2018 Panel data
+        import_hmda_post2018(
             data_folder=raw_folder / "panel",
             save_folder=clean_folder / "panel", 
             schema_file=panel_schema_path,
@@ -140,6 +133,7 @@ def main():
             max_year=max_year,
             add_hmda_index=False,  # Panel doesn't need HMDA index
             add_file_type=True,
+            clean=False,  # Panel data doesn't need cleaning
         )
         
         logger.info("  ✅ Panel data import completed successfully")
@@ -161,8 +155,8 @@ def main():
     logger.info("5. Importing Transmittal Sheet data...")
     
     try:
-        # Import post-2018 TS data
-        import_hmda_post_2018(
+        # Import post2018 TS data
+        import_hmda_post2018(
             data_folder=raw_folder / "transmissal_series",
             save_folder=clean_folder / "transmissal_series",
             schema_file=ts_schema_path,
@@ -170,6 +164,7 @@ def main():
             max_year=max_year,
             add_hmda_index=False,  # TS doesn't need HMDA index
             add_file_type=True,
+            clean=False,  # TS data doesn't need cleaning
         )
         
         logger.info("  ✅ Transmittal Sheet data import completed successfully")
@@ -184,38 +179,11 @@ def main():
         logger.error(f"  ❌ Error importing TS data: {e}")
         return False
     
-    # # =============================================================================
-    # # 6. Combine Panel and TS Data (Optional)
-    # # =============================================================================
-    
-    # logger.info("6. Creating combined lender dataset...")
-    
-    # try:
-    #     # Use the utility function to combine panel and TS data
-    #     combine_lenders_panel_ts_post2018(
-    #         panel_folder=clean_folder / "panel",
-    #         ts_folder=clean_folder / "transmissal_series", 
-    #         save_folder=clean_folder,
-    #         min_year=min_year,
-    #         max_year=max_year
-    #     )
-        
-    #     logger.info("  ✅ Combined lender dataset created successfully")
-        
-    #     # Check if the combined file was created
-    #     combined_file = clean_folder / "hmda_lenders_combined.parquet"
-    #     if combined_file.exists():
-    #         logger.info(f"  Combined file: {combined_file}")
-        
-    # except Exception as e:
-    #     logger.error(f"  ❌ Error creating combined dataset: {e}")
-    #     # This is optional, so continue even if it fails
-    
     # =============================================================================
-    # 7. Data Validation and Summary Statistics
+    # 6. Data Validation and Summary Statistics
     # =============================================================================
     
-    logger.info("7. Performing data validation and generating summary statistics...")
+    logger.info("6. Performing data validation and generating summary statistics...")
     
     try:
         # Load and examine LAR data
@@ -281,10 +249,10 @@ def main():
         logger.error(f"  ❌ Error during validation: {e}")
     
     # =============================================================================
-    # 8. Create Hive-Partitioned Database (Optional)
+    # 7. Create Hive-Partitioned Database (Optional)
     # =============================================================================
     
-    logger.info("8. Creating hive-partitioned database...")
+    logger.info("7. Creating hive-partitioned database...")
     
     try:
         # Create a hive-partitioned dataset from the imported LAR data
@@ -322,10 +290,10 @@ def main():
         logger.warning("  Database creation failed, but imported files are still available")
     
     # =============================================================================
-    # 9. Summary and Next Steps
+    # 8. Summary and Next Steps
     # =============================================================================
     
-    logger.info("9. Import workflow completed! 🎉")
+    logger.info("8. Import workflow completed! 🎉")
     logger.info("=" * 60)
     
     logger.info("📁 Files created in the clean data directory:")

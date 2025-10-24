@@ -7,7 +7,7 @@ HMDA lender data across different time periods. It handles merging panel
 and transmittal series (TS) data to create comprehensive lender datasets.
 
 Key Features:
-- Combine panel and TS data for different time periods (pre-2018 vs post-2018)
+- Combine panel and TS data for different time periods (pre-2018 vs post2018)
 - Handle different data formats and column structures across HMDA vintages
 - Create combined lender files spanning multiple years
 - Data cleaning and standardization
@@ -17,7 +17,7 @@ Main Functions:
 - combine_lenders_panel_ts_pre2018: Combine legacy lender data (2007-2017)
 
 Notes:
-- Pre-2018 and post-2018 data have different schemas and merge keys
+- Pre-2018 and post2018 data have different schemas and merge keys
 - Post-2018 uses 'lei' (Legal Entity Identifier) as primary key
 - Pre-2018 uses combination of 'Respondent ID' and 'Agency Code'
 """
@@ -42,7 +42,7 @@ PRE2018_TS_DROP_COLUMNS = [
 
 
 def _merge_panel_ts_post2018(panel: pd.DataFrame, ts: pd.DataFrame) -> pd.DataFrame:
-    """Merge panel and TS data for post-2018 files.
+    """Merge panel and TS data for post2018 files.
     
     Post-2018 data uses LEI (Legal Entity Identifier) as the primary key
     for matching between panel and transmittal series data.
