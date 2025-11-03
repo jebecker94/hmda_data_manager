@@ -28,6 +28,8 @@ Example Usage
 -------------
 >>> from hmda_data_manager.core.import_data import import_hmda_post2018
 >>> import_hmda_post2018(raw_folder, clean_folder, schema_file, 2020, 2024, clean=True)
+>>> from hmda_data_manager.core.import_data import import_hmda_post2018
+>>> import_hmda_post2018(raw_folder, clean_folder, schema_file, 2020, 2024, clean=True)
 
 >>> from hmda_data_manager.core.import_data import import_hmda_data
 >>> import_hmda_data(year_range=(2018, 2024), data_folder=raw_folder)

@@ -36,6 +36,7 @@ For detailed examples, see the examples/ directory in the repository.
 Notes
 -----
 The HMDAIndex variable is automatically created for post2018 data to provide
+The HMDAIndex variable is automatically created for post2018 data to provide
 unique identifiers across HMDA releases. Format: YYYYt_######### where YYYY is
 the year, t is the file type code, and # is the zero-padded row number.
 

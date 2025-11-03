@@ -19,6 +19,8 @@ import logging
 import shutil
 import time
 from collections.abc import Sequence
+import time
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 import polars as pl
@@ -410,6 +412,10 @@ def _rename_columns_post2018(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Rename columns for post2018 files to standardize naming.
 
     Note: If other errors in the variable names are discovered, add them here.
+def _rename_columns_post2018(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Rename columns for post2018 files to standardize naming.
+
+    Note: If other errors in the variable names are discovered, add them here.
     
     Parameters
     ----------
@@ -468,6 +474,7 @@ def build_bronze_post2018(
             file_name = normalized_file_stem(archive.stem)
             save_file = bronze_folder / f"{file_name}.parquet"
 
+            # Check if we should process the raw file
             if not should_process_output(save_file, replace):
                 logger.debug("Skipping existing bronze file: %s", save_file)
                 continue

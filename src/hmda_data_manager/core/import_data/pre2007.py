@@ -112,6 +112,11 @@ def import_hmda_pre_2007(
                 if not isinstance(df, pl.DataFrame):
                     df = pl.from_pandas(df) if hasattr(df, 'to_pandas') else pl.DataFrame(df)
 
+                
+                # Ensure we have a polars DataFrame
+                if not isinstance(df, pl.DataFrame):
+                    df = pl.from_pandas(df) if hasattr(df, 'to_pandas') else pl.DataFrame(df)
+
                 # Convert string columns to numeric types
                 df = destring_hmda_cols_pre2007(df)
 
