@@ -13,17 +13,27 @@ Prerequisites:
 
 # Import Packages
 import polars as pl
-from hmda_data_manager.core import DATA_DIR
+from hmda_data_manager.core import (
+    DATA_DIR,
+    RAW_DIR,
+    BRONZE_DIR,
+    SILVER_DIR,
+    build_bronze_post2018,
+    build_silver_post2018,
+)
 
 # Read from hive-partitioned database (created by example_import_workflow_post2018.py)
 # This demonstrates efficient querying of the partitioned dataset
-df = pl.scan_parquet(DATA_DIR / "database/loans/post2018")
+df = pl.scan_parquet(SILVER_DIR / "loans" / "post2018")
 
 # Select DC Purchases with SQL
 df = df.sql('''
 SELECT *
 FROM loans
-WHERE state_code = 'DC' AND action_taken = 6
+WHERE state_code = 'DC'
+AND action_taken = 6
+AND activity_year = 2024
+AND file_type = 'c'
 ''',
 table_name = 'loans')
 

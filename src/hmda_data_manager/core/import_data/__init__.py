@@ -22,14 +22,12 @@ Main Functions
 --------------
 - import_hmda_pre_2007: Import legacy format data
 - import_hmda_2007_2017: Import standardized format data
-- import_hmda_post_2018: Import modern format data
-- clean_hmda_post_2017: Clean and standardize post-2017 data
-- save_to_dataset: Save processed data to partitioned datasets
+ 
 
 Example Usage
 -------------
->>> from hmda_data_manager.core.import_data import import_hmda_post_2018
->>> import_hmda_post_2018(raw_folder, clean_folder, schema_file, 2020, 2024)
+>>> from hmda_data_manager.core.import_data import import_hmda_post2018
+>>> import_hmda_post2018(raw_folder, clean_folder, schema_file, 2020, 2024, clean=True)
 
 >>> from hmda_data_manager.core.import_data import import_hmda_data
 >>> import_hmda_data(year_range=(2018, 2024), data_folder=raw_folder)
@@ -38,18 +36,18 @@ Example Usage
 # Import main functions from each module
 from .pre2007 import import_hmda_pre_2007
 from .period_2007_2017 import import_hmda_2007_2017
-from .post2018 import import_hmda_post_2018, clean_hmda_post_2017
-from .common import save_to_dataset
+from .post2018 import (
+    build_bronze_post2018,
+    build_silver_post2018,
+)
 
 __all__ = [
     # Main import functions
     "import_hmda_pre_2007",
     "import_hmda_2007_2017", 
-    "import_hmda_post_2018",
-    
     # Post-processing functions
-    "clean_hmda_post_2017",
-    "save_to_dataset",
+    "build_bronze_post2018",
+    "build_silver_post2018",
     
     # Convenience function
     "import_hmda_data",
@@ -86,7 +84,10 @@ def import_hmda_data(year_range: tuple[int, int], **kwargs):
     elif min_year >= 2007 and max_year <= 2017:
         return import_hmda_2007_2017(min_year=min_year, max_year=max_year, **kwargs)  
     elif min_year >= 2018:
-        return import_hmda_post_2018(min_year=min_year, max_year=max_year, **kwargs)
+        raise ValueError(
+            "Direct import for post-2018 is deprecated. Use build_bronze_post2018/"
+            "build_silver_post2018 instead."
+        )
     else:
         raise ValueError(
             f"Year range {year_range} spans multiple data format periods. "

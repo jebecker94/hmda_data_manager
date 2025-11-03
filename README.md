@@ -45,3 +45,37 @@ In order to use this project, there are a few manual steps to take before you ca
 1. Download HMDA data
 - Navigate to the HMDA data website and download the static files you with to use.
 2. Place the zip files in the raw data folder
+
+## Medallion data layout (post-2018)
+
+This package writes processed data using a medallion structure:
+
+- Raw: `data/raw/{loans,panel,transmissal_series}` (ZIPs, unchanged)
+- Bronze: `data/bronze/{loans,panel,transmissal_series}/{pre2007,period_2007_2017,post2018}`
+- Silver (hive): `data/silver/{loans,panel,transmissal_series}/post2018/activity_year=YYYY/file_type=X/*.parquet`
+
+To build bronze and silver for post-2018:
+
+```python
+from hmda_data_manager.core import build_bronze_post2018, build_silver_post2018
+
+# Choose years
+min_year, max_year = 2019, 2019
+
+# Bronze (per dataset)
+build_bronze_post2018("loans", min_year=min_year, max_year=max_year)
+build_bronze_post2018("panel", min_year=min_year, max_year=max_year)
+build_bronze_post2018("transmissal_series", min_year=min_year, max_year=max_year)
+
+# Silver (hive-partitioned)
+build_silver_post2018("loans", min_year=min_year, max_year=max_year, replace=True)
+build_silver_post2018("panel", min_year=min_year, max_year=max_year, replace=True)
+build_silver_post2018("transmissal_series", min_year=min_year, max_year=max_year, replace=True)
+```
+
+Read silver directly with Polars:
+
+```python
+import polars as pl
+df = pl.scan_parquet("data/silver/loans/post2018")
+```
