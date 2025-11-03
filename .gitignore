@@ -4,15 +4,15 @@
 # Dependencies
 __pycache__/
 .venv
-.ruff_cache/
 
 # Logs
 *.log
 
-# Data and Output Folders
+# Data Folder
 data/
-output/
-deprecated/
 
 # Cursor
 .cursor/
+
+# Other
+.DS_Store
