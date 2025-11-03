@@ -20,11 +20,57 @@ import polars as pl
 from ...utils.support import (
     get_delimiter,
     rename_hmda_columns,
-    destring_hmda_cols_pre2007,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+def destring_hmda_cols_pre2007(df: pl.DataFrame) -> pl.DataFrame:
+    """Convert numeric HMDA columns stored as strings to numeric types.
+
+    Parameters
+    ----------
+    df : pl.DataFrame
+        HMDA data with numeric fields stored as strings.
+
+    Returns
+    -------
+    pl.DataFrame
+        DataFrame with numeric columns converted to numeric dtype.
+    """
+
+    numeric_columns = [
+        "activity_year",
+        "loan_type",
+        "loan_purpose",
+        "occupancy_type",
+        "loan_amount",
+        "action_taken",
+        "msa_md",
+        "state_code",
+        "county_code",
+        "applicant_race_1",
+        "co_applicant_race_1",
+        "applicant_sex",
+        "co_applicant_sex",
+        "income",
+        "purchaser_type",
+        "denial_reason_1",
+        "denial_reason_2",
+        "denial_reason_3",
+        "edit_status",
+        "sequence_number",
+    ]
+
+    casts = [
+        pl.col(col).cast(pl.Float64, strict=False)
+        for col in numeric_columns
+        if col in df.columns
+    ]
+    if casts:
+        df = df.with_columns(casts)
+    return df
 
 
 def import_hmda_pre_2007(

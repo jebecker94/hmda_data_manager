@@ -22,13 +22,14 @@ from .support import (
     unzip_hmda_file,
     rename_hmda_columns,
     replace_csv_column_names,
-    destring_hmda_cols_pre2007,
-    destring_hmda_cols_2007_2017,
     clean_hmda,
     add_identity_keys,
     replace_na_like_values,
     standardize_schema,
+)
+from .export import (
     save_file_to_stata,
+    prepare_hmda_for_stata,
 )
  
 
@@ -41,8 +42,6 @@ __all__ = [
     
     # Data transformation
     "rename_hmda_columns",
-    "destring_hmda_cols_pre2007",
-    "destring_hmda_cols_2007_2017", 
     
     # Data cleaning pipelines
     "clean_hmda",
@@ -54,5 +53,6 @@ __all__ = [
     
     # Export functions
     "save_file_to_stata",
+    "prepare_hmda_for_stata",
 ]
 

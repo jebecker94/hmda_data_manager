@@ -22,9 +22,9 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 import polars as pl
-from ...utils.support import destring_hmda_cols_2007_2017, get_delimiter, get_file_schema, unzip_hmda_file
+from ...utils.support import get_delimiter, get_file_schema, unzip_hmda_file
 import polars as pl
-from ...utils.support import destring_hmda_cols_2007_2017, get_delimiter, get_file_schema, unzip_hmda_file
+from ...utils.support import get_delimiter, get_file_schema, unzip_hmda_file
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,75 @@ INTEGER_DTYPES = {
     pl.UInt64,
 }
 
+
+def destring_hmda_cols_2007_2017(df: pd.DataFrame) -> pd.DataFrame:
+    """Destring numeric HMDA columns for 2007-2017 (pandas)."""
+    logger.info("Destringing HMDA variables (2007-2017)")
+
+    geo_cols = ["state_code", "county_code", "census_tract"]
+    df[geo_cols] = df[geo_cols].apply(pd.to_numeric, errors="coerce")
+    df["state_code"].astype("Int16")
+    df["county_code"] = (1000 * df["state_code"] + df["county_code"]).astype("Int32")
+    df["census_tract"] = (100 * df["census_tract"]).round().astype("Int32")
+    df["census_tract"] = df["census_tract"].astype(str)
+    df["census_tract"] = [x.zfill(6) for x in df["census_tract"]]
+    df["census_tract"] = df["county_code"].astype("str") + df["census_tract"]
+    df["census_tract"] = pd.to_numeric(df["census_tract"], errors="coerce")
+    df["census_tract"] = df["census_tract"].astype("Int64")
+
+    numeric_columns = [
+        "activity_year",
+        "loan_type",
+        "loan_purpose",
+        "occupancy_type",
+        "loan_amount",
+        "action_taken",
+        "msa_md",
+        "applicant_race_1",
+        "applicant_race_2",
+        "applicant_race_3",
+        "applicant_race_4",
+        "applicant_race_5",
+        "co_applicant_race_1",
+        "co_applicant_race_2",
+        "co_applicant_race_3",
+        "co_applicant_race_4",
+        "co_applicant_race_5",
+        "applicant_ethnicity_1",
+        "applicant_ethnicity_2",
+        "applicant_ethnicity_3",
+        "applicant_ethnicity_4",
+        "applicant_ethnicity_5",
+        "co_applicant_ethnicity_1",
+        "co_applicant_ethnicity_2",
+        "co_applicant_ethnicity_3",
+        "co_applicant_ethnicity_4",
+        "co_applicant_ethnicity_5",
+        "applicant_sex",
+        "co_applicant_sex",
+        "income",
+        "purchaser_type",
+        "submission_of_application",
+        "initially_payable_to_institution",
+        "denial_reason_1",
+        "denial_reason_2",
+        "denial_reason_3",
+        "denial_reason_4",
+        "edit_status",
+        "sequence_number",
+        "rate_spread",
+        "tract_population",
+        "tract_minority_population_percent",
+        "ffiec_msa_md_median_family_income",
+        "tract_to_msa_income_percentage",
+        "tract_owner_occupied_units",
+        "tract_one_to_four_family_homes",
+        "tract_median_age_of_housing_units",
+    ]
+    for numeric_column in numeric_columns:
+        if numeric_column in df.columns:
+            df[numeric_column] = pd.to_numeric(df[numeric_column], errors="coerce")
+    return df
 
 def normalized_file_stem(stem: str) -> str:
     """Remove common suffixes from extracted archive names.
