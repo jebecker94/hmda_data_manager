@@ -24,7 +24,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 import polars as pl
-from ...utils.support import get_delimiter, get_file_schema, unzip_hmda_file
+from ...utils.io import get_delimiter, unzip_hmda_file
+from ...utils.schema import get_file_schema
 from ..config import RAW_DIR, get_medallion_dir
 from ...schemas import get_schema_path
 

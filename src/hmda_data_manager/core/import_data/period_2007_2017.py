@@ -22,10 +22,8 @@ import time
 from collections.abc import Sequence
 from pathlib import Path
 import polars as pl
-from ...utils.support import get_delimiter, get_file_schema, unzip_hmda_file
-import polars as pl
-from ...utils.support import get_delimiter, get_file_schema, unzip_hmda_file
-
+from ...utils.io import get_delimiter, unzip_hmda_file
+from ...utils.schema import get_file_schema
 
 logger = logging.getLogger(__name__)
 

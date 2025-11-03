@@ -17,10 +17,8 @@ This module is relatively stable since the legacy data format is unlikely to cha
 import logging
 from pathlib import Path
 import polars as pl
-from ...utils.support import (
-    get_delimiter,
-    rename_hmda_columns,
-)
+from ...utils.io import get_delimiter
+from ...utils.schema import rename_hmda_columns
 
 
 logger = logging.getLogger(__name__)
