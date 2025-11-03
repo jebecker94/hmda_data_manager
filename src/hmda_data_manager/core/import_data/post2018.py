@@ -73,6 +73,7 @@ POST2018_INTEGER_COLUMNS = [
     "loan_amount",
     "action_taken",
     "msa_md",
+    "derived_msa_md",
     "applicant_race_1",
     "applicant_race_2",
     "applicant_race_3",
