@@ -122,12 +122,12 @@ if __name__ == "__main__":
     Run the import workflow.
     
     Before running:
-    1. Ensure you have downloaded HMDA data using example_download_hmda_data.py
+    1. Ensure you have downloaded HMDA data using 01_example_download_hmda_data.py
     2. Adjust the min_year and max_year variables above as needed
     3. Ensure you have sufficient disk space for the processed files
     
     Usage:
-        python examples/example_import_workflow_post2018.py
+        python examples/02_example_import_workflow_post2018.py
     """
     
     success = main()

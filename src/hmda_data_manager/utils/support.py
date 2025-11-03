@@ -445,7 +445,6 @@ def destring_hmda_cols_2007_2017(df):
 
 # Destring HMDA Columns
 def destring_hmda_cols_post2018(lf):
-def destring_hmda_cols_post2018(lf):
     """
     Destring numeric HMDA variables after 2018.
 

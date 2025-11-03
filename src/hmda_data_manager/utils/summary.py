@@ -45,7 +45,6 @@ PRE2018_TS_DROP_COLUMNS = [
 
 def _merge_panel_ts_post2018(panel: pd.DataFrame, ts: pd.DataFrame) -> pd.DataFrame:
     """Merge panel and TS data for post2018 files.
-    """Merge panel and TS data for post2018 files.
     
     Post-2018 data uses LEI (Legal Entity Identifier) as the primary key
     for matching between panel and transmittal series data.

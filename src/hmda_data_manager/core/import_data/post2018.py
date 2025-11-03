@@ -407,11 +407,6 @@ def _append_hmda_index(
         )
     )
 
-
-def _rename_columns_post2018(lf: pl.LazyFrame) -> pl.LazyFrame:
-    """Rename columns for post2018 files to standardize naming.
-
-    Note: If other errors in the variable names are discovered, add them here.
 def _rename_columns_post2018(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Rename columns for post2018 files to standardize naming.
 
