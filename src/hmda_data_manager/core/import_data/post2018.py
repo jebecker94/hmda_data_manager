@@ -25,7 +25,6 @@ from pathlib import Path
 from typing import Literal
 import polars as pl
 from ...utils.support import get_delimiter, get_file_schema, unzip_hmda_file
-from .common import HMDA_INDEX_COLUMN
 from ..config import RAW_DIR, get_medallion_dir
 from ...schemas import get_schema_path
 
@@ -34,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 # Constants specific to post2018 data
+HMDA_INDEX_COLUMN = "HMDAIndex"
 DERIVED_COLUMNS = [
     "derived_loan_product_type",
     "derived_race",
@@ -270,8 +270,8 @@ def _destring_and_cast_hmda_cols_post2018(
     """
     Destring numeric HMDA variables and cast integer-like floats to integers.
 
-    This function combines the functionality of destring_hmda_cols_post2018 and
-    _cast_integer_like_floats to reduce redundancy and improve performance.
+    This consolidates destringing and integer coercion to reduce redundancy and
+    improve performance.
 
     Parameters
     ----------

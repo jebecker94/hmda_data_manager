@@ -29,9 +29,11 @@ from pathlib import Path
 
 # Import the summary functions and configuration
 from hmda_data_manager.core import DATA_DIR, CLEAN_DIR
-from hmda_data_manager.utils import (
+from hmda_data_manager.core.lenders.period_2007_2017 import (
+    combine_lenders_panel_ts_period_2007_2017,
+)
+from hmda_data_manager.core.lenders.post2018 import (
     combine_lenders_panel_ts_post2018,
-    combine_lenders_panel_ts_pre2018
 )
 
 # Set up logging
@@ -155,7 +157,7 @@ def main():
             # Use the utility function to combine pre-2018 data
             logger.info(f"  Combining data for years {pre2018_min_year}-{pre2018_max_year}...")
             
-            combine_lenders_panel_ts_pre2018(
+            combine_lenders_panel_ts_period_2007_2017(
                 panel_folder=panel_folder,
                 ts_folder=ts_folder,
                 save_folder=data_folder,

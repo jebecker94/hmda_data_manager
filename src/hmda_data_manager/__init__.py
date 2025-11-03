@@ -21,7 +21,8 @@ Example Usage
 -------------
 >>> # Import and download functions
 >>> from hmda_data_manager.core import download_hmda_files
->>> from hmda_data_manager.utils import get_file_schema, combine_lenders_panel_ts_post2018
+>>> from hmda_data_manager.utils import get_file_schema
+>>> from hmda_data_manager.core.lenders.post2018 import combine_lenders_panel_ts_post2018
 >>> from hmda_data_manager.schemas import get_schema_path
 
 >>> # Download data for recent years

@@ -26,13 +26,9 @@ Main Functions
 
 Example Usage
 -------------
->>> from hmda_data_manager.core.import_data import import_hmda_post2018
->>> import_hmda_post2018(raw_folder, clean_folder, schema_file, 2020, 2024, clean=True)
->>> from hmda_data_manager.core.import_data import import_hmda_post2018
->>> import_hmda_post2018(raw_folder, clean_folder, schema_file, 2020, 2024, clean=True)
-
->>> from hmda_data_manager.core.import_data import import_hmda_data
->>> import_hmda_data(year_range=(2018, 2024), data_folder=raw_folder)
+>>> from hmda_data_manager.core.import_data import build_bronze_post2018, build_silver_post2018
+>>> build_bronze_post2018("loans", min_year=2020, max_year=2024)
+>>> build_silver_post2018("loans", min_year=2020, max_year=2024)
 """
 
 # Import main functions from each module
@@ -50,48 +46,4 @@ __all__ = [
     # Post-processing functions
     "build_bronze_post2018",
     "build_silver_post2018",
-    
-    # Convenience function
-    "import_hmda_data",
 ]
-
-
-def import_hmda_data(year_range: tuple[int, int], **kwargs):
-    """
-    Convenience function that routes to appropriate import function based on year range.
-    
-    Parameters
-    ----------
-    year_range : tuple[int, int]
-        (min_year, max_year) tuple defining the years to import
-    **kwargs
-        Additional arguments passed to the specific import function
-        
-    Returns
-    -------
-    None
-        
-    Examples
-    --------
-    >>> # Import modern data
-    >>> import_hmda_data((2018, 2024), data_folder=raw_dir, save_folder=clean_dir)
-    
-    >>> # Import legacy data  
-    >>> import_hmda_data((1990, 2006), data_folder=raw_dir, save_folder=clean_dir)
-    """
-    min_year, max_year = year_range
-    
-    if max_year <= 2006:
-        return import_hmda_pre_2007(min_year=min_year, max_year=max_year, **kwargs)
-    elif min_year >= 2007 and max_year <= 2017:
-        return import_hmda_2007_2017(min_year=min_year, max_year=max_year, **kwargs)  
-    elif min_year >= 2018:
-        raise ValueError(
-            "Direct import for post-2018 is deprecated. Use build_bronze_post2018/"
-            "build_silver_post2018 instead."
-        )
-    else:
-        raise ValueError(
-            f"Year range {year_range} spans multiple data format periods. "
-            "Please use period-specific import functions or split into separate ranges."
-        )
