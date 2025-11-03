@@ -25,13 +25,9 @@ from .support import (
     destring_hmda_cols_pre2007,
     destring_hmda_cols_2007_2017,
     clean_hmda,
-    clean_hmda_polars,
     add_identity_keys,
-    add_identity_keys_polars,
     replace_na_like_values,
-    replace_na_like_values_polars,
     standardize_schema,
-    standardize_schema_polars,
     save_file_to_stata,
 )
  
@@ -50,15 +46,11 @@ __all__ = [
     
     # Data cleaning pipelines
     "clean_hmda",
-    "clean_hmda_polars",
     
     # Key utilities
     "add_identity_keys",
-    "add_identity_keys_polars",
     "replace_na_like_values",
-    "replace_na_like_values_polars",
     "standardize_schema",
-    "standardize_schema_polars",
     
     # Export functions
     "save_file_to_stata",
