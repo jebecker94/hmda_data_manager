@@ -9,13 +9,20 @@ The HMDA data files are large and unweildy. To my knowledge, there are few resou
 
 # Functionality
 Major functions on this project include:
-1. Managing downloads
+1. **Medallion Architecture ETL Pipeline**
+   - Raw → Bronze → Silver data processing with consistent schemas
+   - Support for all HMDA time periods: Pre-2007 [In progress], 2007-2017, and Post-2018
+   - Hive-partitioned silver layer for efficient querying
+2. **Managing downloads**
+   - Automated download tools for CFPB HMDA data
    - Tracking changes across major revisions of files
-2. Streamlined reading and storage
+3. **Streamlined reading and storage**
    - Convert large files to parquet, with appropriate column types and convenient partitioning
-3. Standardizing variables, detecting outliers, and fixing data errors
+   - Schema harmonization across years and file types
+   - Robust dtype casting and NA value handling
+4. **Standardizing variables, detecting outliers, and fixing data errors**
    - Year-by-reporter checks for systematic data errors (e.g., incorrect conventions for reporting rates, points+fees, etc.)
-4. Creating derived datasets
+5. **Creating derived datasets**
    - Linking originated and purchased loans within and across years
 
 # The HMDAIndex Variable
@@ -46,36 +53,65 @@ In order to use this project, there are a few manual steps to take before you ca
 - Navigate to the HMDA data website and download the static files you with to use.
 2. Place the zip files in the raw data folder
 
-## Medallion data layout (post-2018)
+## Medallion Data Architecture
 
-This package writes processed data using a medallion structure:
+This package implements a modern medallion architecture for HMDA data processing:
 
-- Raw: `data/raw/{loans,panel,transmissal_series}` (ZIPs, unchanged)
-- Bronze: `data/bronze/{loans,panel,transmissal_series}/{pre2007,period_2007_2017,post2018}`
-- Silver (hive): `data/silver/{loans,panel,transmissal_series}/post2018/activity_year=YYYY/file_type=X/*.parquet`
+### Data Layout Structure
+- **Raw**: `data/raw/{loans,panel,transmissal_series}` (Original ZIP files, unchanged)
+- **Bronze**: `data/bronze/{loans,panel,transmissal_series}/{pre2007,period_2007_2017,post2018}` (Minimal processing, one parquet per archive)
+- **Silver**: `data/silver/{loans,panel,transmissal_series}/{period_2007_2017,post2018}/activity_year=YYYY/file_type=X/*.parquet` (Hive-partitioned, analysis-ready)
 
-To build bronze and silver for post-2018:
+### Post-2018 Data (2018-2024)
 
 ```python
 from hmda_data_manager.core import build_bronze_post2018, build_silver_post2018
 
 # Choose years
-min_year, max_year = 2019, 2019
+min_year, max_year = 2018, 2024
 
 # Bronze (per dataset)
 build_bronze_post2018("loans", min_year=min_year, max_year=max_year)
 build_bronze_post2018("panel", min_year=min_year, max_year=max_year)
 build_bronze_post2018("transmissal_series", min_year=min_year, max_year=max_year)
 
-# Silver (hive-partitioned)
-build_silver_post2018("loans", min_year=min_year, max_year=max_year, replace=True)
-build_silver_post2018("panel", min_year=min_year, max_year=max_year, replace=True)
-build_silver_post2018("transmissal_series", min_year=min_year, max_year=max_year, replace=True)
+# Silver (hive-partitioned with HMDAIndex, file_type, tract variable handling)
+build_silver_post2018("loans", min_year=min_year, max_year=max_year)
+build_silver_post2018("panel", min_year=min_year, max_year=max_year)
+build_silver_post2018("transmissal_series", min_year=min_year, max_year=max_year)
 ```
 
-Read silver directly with Polars:
+### 2007-2017 Data (Standardized Period)
+
+```python
+from hmda_data_manager.core import build_bronze_period_2007_2017, build_silver_period_2007_2017
+
+# Bronze (loans only for this period)
+build_bronze_period_2007_2017("loans", min_year=2007, max_year=2017)
+
+# Silver (with schema harmonization, dtype casting, and tract variable handling)
+build_silver_period_2007_2017("loans", min_year=2007, max_year=2017, drop_tract_vars=True)
+```
+
+### Key Features
+
+- **Schema Harmonization**: Automatically resolves column naming inconsistencies across years
+- **Robust Type Casting**: Handles mixed string/numeric columns with proper NA value conversion
+- **Tract Variable Management**: Optional dropping of bulky census tract summary statistics
+- **Hive Partitioning**: Efficient querying by `activity_year` and `file_type`
+- **File Type Detection**: Smart inference from filenames (three_year→'a', one_year→'b', public_lar→'c', nationwide→'d')
+
+### Reading Silver Data
 
 ```python
 import polars as pl
-df = pl.scan_parquet("data/silver/loans/post2018")
+
+# Load all post-2018 loans
+df_post2018 = pl.scan_parquet("data/silver/loans/post2018")
+
+# Load all 2007-2017 loans  
+df_2007_2017 = pl.scan_parquet("data/silver/loans/period_2007_2017")
+
+# Load specific year and file type
+df_2020_snapshot = pl.scan_parquet("data/silver/loans/post2018/activity_year=2020/file_type=c")
 ```
