@@ -31,7 +31,8 @@ from .config import (
 # Import data import functions
 from .import_data import (
     import_hmda_pre_2007,
-    import_hmda_2007_2017,
+    build_bronze_period_2007_2017,
+    build_silver_period_2007_2017,
     build_bronze_post2018,
     build_silver_post2018,
 )
@@ -55,7 +56,8 @@ __all__ = [
     
     # Import functions
     "import_hmda_pre_2007",
-    "import_hmda_2007_2017",
+    "build_bronze_period_2007_2017",
+    "build_silver_period_2007_2017",
     "build_bronze_post2018",
     "build_silver_post2018",
     

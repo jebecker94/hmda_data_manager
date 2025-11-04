@@ -18,332 +18,83 @@ This module is relatively stable since the 2007-2017 data format is finalized.
 import logging
 import time
 from collections.abc import Sequence
-import time
-from collections.abc import Sequence
 from pathlib import Path
 import polars as pl
+import pandas as pd
+from typing import Literal
 from ...utils.io import get_delimiter, unzip_hmda_file
-from ...utils.schema import get_file_schema
+from ...utils.schema import get_file_schema, rename_hmda_columns
+from ...schemas import get_schema_path
+from ..config import RAW_DIR, get_medallion_dir
 
 logger = logging.getLogger(__name__)
 
 
 # Constants specific to 2007-2017 data
-PRE2018_TS_DROP_COLUMNS = [
-    "Respondent Name (Panel)",
-    "Respondent City (Panel)",
-    "Respondent State (Panel)",
+# Tract summary variables to optionally drop in silver layer
+PERIOD_2007_2017_TRACT_COLUMNS = [
+    "tract_population",
+    "tract_minority_population_percent", 
+    "ffiec_msa_md_median_family_income",
+    "tract_to_msa_income_percentage",
+    "tract_owner_occupied_units",
+    "tract_one_to_four_family_units",
+    "tract_median_age_of_housing_units",
 ]
 
-FLOAT_DTYPES = {pl.Float32, pl.Float64}
-INTEGER_DTYPES = {
-    pl.Int8,
-    pl.Int16,
-    pl.Int32,
-    pl.Int64,
-    pl.UInt8,
-    pl.UInt16,
-    pl.UInt32,
-    pl.UInt64,
-}
-
-
-def destring_hmda_cols_2007_2017(df: pd.DataFrame) -> pd.DataFrame:
-    """Destring numeric HMDA columns for 2007-2017 (pandas)."""
-    logger.info("Destringing HMDA variables (2007-2017)")
-
-    geo_cols = ["state_code", "county_code", "census_tract"]
-    df[geo_cols] = df[geo_cols].apply(pd.to_numeric, errors="coerce")
-    df["state_code"].astype("Int16")
-    df["county_code"] = (1000 * df["state_code"] + df["county_code"]).astype("Int32")
-    df["census_tract"] = (100 * df["census_tract"]).round().astype("Int32")
-    df["census_tract"] = df["census_tract"].astype(str)
-    df["census_tract"] = [x.zfill(6) for x in df["census_tract"]]
-    df["census_tract"] = df["county_code"].astype("str") + df["census_tract"]
-    df["census_tract"] = pd.to_numeric(df["census_tract"], errors="coerce")
-    df["census_tract"] = df["census_tract"].astype("Int64")
-
-    numeric_columns = [
-        "activity_year",
-        "loan_type",
-        "loan_purpose",
-        "occupancy_type",
-        "loan_amount",
-        "action_taken",
-        "msa_md",
-        "applicant_race_1",
-        "applicant_race_2",
-        "applicant_race_3",
-        "applicant_race_4",
-        "applicant_race_5",
-        "co_applicant_race_1",
-        "co_applicant_race_2",
-        "co_applicant_race_3",
-        "co_applicant_race_4",
-        "co_applicant_race_5",
-        "applicant_ethnicity_1",
-        "applicant_ethnicity_2",
-        "applicant_ethnicity_3",
-        "applicant_ethnicity_4",
-        "applicant_ethnicity_5",
-        "co_applicant_ethnicity_1",
-        "co_applicant_ethnicity_2",
-        "co_applicant_ethnicity_3",
-        "co_applicant_ethnicity_4",
-        "co_applicant_ethnicity_5",
-        "applicant_sex",
-        "co_applicant_sex",
-        "income",
-        "purchaser_type",
-        "submission_of_application",
-        "initially_payable_to_institution",
-        "denial_reason_1",
-        "denial_reason_2",
-        "denial_reason_3",
-        "denial_reason_4",
-        "edit_status",
-        "sequence_number",
-        "rate_spread",
-        "tract_population",
-        "tract_minority_population_percent",
-        "ffiec_msa_md_median_family_income",
-        "tract_to_msa_income_percentage",
-        "tract_owner_occupied_units",
-        "tract_one_to_four_family_homes",
-        "tract_median_age_of_housing_units",
-    ]
-    for numeric_column in numeric_columns:
-        if numeric_column in df.columns:
-            df[numeric_column] = pd.to_numeric(df[numeric_column], errors="coerce")
-    return df
-
-def normalized_file_stem(stem: str) -> str:
-    """Remove common suffixes from extracted archive names.
-
-    Parameters
-    ----------
-    stem : str
-        File stem (name without extension)
-
-    Returns
-    -------
-    str
-        Normalized file stem with common suffixes removed
-    """
-    if stem.endswith("_csv"):
-        stem = stem[:-4]
-    if stem.endswith("_pipe"):
-        stem = stem[:-5]
-    return stem
-
-
-def should_process_output(path: Path, replace: bool) -> bool:
-    """Return ``True`` when the target path should be generated.
-
-    Parameters
-    ----------
-    path : Path
-        Target output file path
-    replace : bool
-        Whether to replace existing files
-
-    Returns
-    -------
-    bool
-        True if file should be processed
-    """
-    return replace or not path.exists()
-
-
-def limit_schema_to_available_columns(
-    raw_file: Path, delimiter: str, schema: dict[str, pl.DataType | str]
-) -> dict[str, pl.DataType | str]:
-    """Restrict a schema to the columns available in a delimited file.
-
-    Parameters
-    ----------
-    raw_file : Path
-        Path to the raw CSV/delimited file
-    delimiter : str
-        Column delimiter character
-    schema : dict[str, pl.DataType | str]
-        Full schema dictionary
-
-    Returns
-    -------
-    dict[str, pl.DataType | str]
-        Schema restricted to available columns
-    """
-    csv_columns = pl.read_csv(
-        raw_file, separator=delimiter, n_rows=0, ignore_errors=True
-    ).columns
-    logger.debug("CSV columns: %s", csv_columns)
-    return {column: schema[column] for column in csv_columns if column in schema}
-
-
-def _integer_like_float_columns(
-    lf: pl.LazyFrame, float_columns: Sequence[str]
-) -> list[str]:
-    """Return float columns whose non-null values are all integers."""
-
-    if not float_columns:
-        return []
-
-    checks = [
-        (
-            pl.when(pl.col(column).is_null())
-            .then(True)
-            .otherwise(
-                pl.when(pl.col(column).is_finite())
-                .then(pl.col(column).round(0) == pl.col(column))
-                .otherwise(False)
-            )
-            .all()
-            .alias(column)
-        )
-        for column in float_columns
-    ]
-
-    if not checks:
-        return []
-
-    result = lf.select(checks).collect()
-    return [column for column in float_columns if bool(result[column][0])]
-
-
-def cast_integer_like_floats(
-    lf: pl.LazyFrame, schema: dict[str, pl.DataType | str]
-) -> pl.LazyFrame:
-    """Cast float columns with integer-only values to integer dtypes."""
-
-    float_columns = [
-        column for column, dtype in lf.schema.items() if dtype in FLOAT_DTYPES
-    ]
-    integer_like_columns = _integer_like_float_columns(lf, float_columns)
-    if not integer_like_columns:
-        return lf
-
-    casts = []
-    for column in integer_like_columns:
-        target_dtype = schema.get(column, pl.Int64)
-        if target_dtype not in INTEGER_DTYPES:
-            target_dtype = pl.Int64
-        casts.append(pl.col(column).cast(target_dtype, strict=False).alias(column))  # type: ignore[arg-type]
-
-    return lf.with_columns(casts)
-
-
-def build_hmda_lazyframe(
-    raw_file: Path,
-    delimiter: str,
-    schema: dict[str, pl.DataType | str],
-    year: int,
-    add_hmda_index: bool,
-    archive_path: Path,
-    add_file_type: bool,
-) -> pl.LazyFrame:
-    """Create a ``polars`` lazy frame for a raw HMDA delimited file.
-
-    Parameters
-    ----------
-    raw_file : Path
-        Path to the extracted delimited file
-    delimiter : str
-        Column delimiter character
-    schema : dict[str, pl.DataType]
-        Column schema dictionary
-    year : int
-        Data year
-    add_hmda_index : bool
-        Whether to add HMDA index column (not used for 2007-2017)
-    archive_path : Path
-        Path to the original archive file
-    add_file_type : bool
-        Whether to add file type column (not used for 2007-2017)
-
-    Returns
-    -------
-    pl.LazyFrame
-        Configured lazy frame for the HMDA file
-    """
-    # For 2007-2017, we don't add HMDA index or file type
-    lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema)  # type: ignore[arg-type]
-    return cast_integer_like_floats(lf, schema)
-
-
-def process_hmda_archive(
-    archive_path: Path,
-    save_path: Path,
-    schema_file: Path,
-    year: int,
-    remove_raw_file: bool,
-    add_hmda_index: bool,
-    add_file_type: bool,
-) -> None:
-    """Read, clean and persist a single HMDA archive.
-
-    Parameters
-    ----------
-    archive_path : Path
-        Path to the zip archive
-    save_path : Path
-        Path where processed file will be saved
-    schema_file : Path
-        Path to the HTML schema file
-    year : int
-        Data year
-    remove_raw_file : bool
-        Whether to remove extracted file after processing
-    add_hmda_index : bool
-        Whether to add HMDA index column (ignored for 2007-2017)
-    add_file_type : bool
-        Whether to add file type column (ignored for 2007-2017)
-    """
-    raw_file_path = Path(unzip_hmda_file(archive_path, archive_path.parent))
-    try:
-        delimiter = get_delimiter(raw_file_path, bytes=16000)
-        schema = get_file_schema(schema_file=schema_file, schema_type="polars")
-        if not isinstance(schema, dict):
-            raise ValueError(f"Expected dict schema, got {type(schema)}")
-        limited_schema = limit_schema_to_available_columns(
-            raw_file_path,
-            delimiter,
-            schema,  # type: ignore[arg-type]
-        )
-        lf = build_hmda_lazyframe(
-            raw_file=raw_file_path,
-            delimiter=delimiter,
-            schema=limited_schema,
-            year=year,
-            add_hmda_index=False,  # Always False for 2007-2017
-            add_file_type=False,   # Always False for 2007-2017
-            archive_path=archive_path,
-        )
-        lf.sink_parquet(save_path)
-    finally:
-        if remove_raw_file:
-            time.sleep(1)
-            raw_file_path.unlink(missing_ok=True)
-
-
-# Constants specific to 2007-2017 data
-PRE2018_TS_DROP_COLUMNS = [
-    "Respondent Name (Panel)",
-    "Respondent City (Panel)",
-    "Respondent State (Panel)",
+# Integer columns that need consistent Int64 casting (based on audit findings)
+PERIOD_2007_2017_INTEGER_COLUMNS = [
+    "activity_year",
+    "loan_type", 
+    "loan_purpose",
+    "occupancy_type",
+    "loan_amount",
+    "action_taken",
+    "msa_md",
+    "applicant_race_1",
+    "applicant_race_2",
+    "applicant_race_3", 
+    "applicant_race_4",
+    "applicant_race_5",
+    "co_applicant_race_1",
+    "co_applicant_race_2",
+    "co_applicant_race_3",
+    "co_applicant_race_4", 
+    "co_applicant_race_5",
+    "applicant_ethnicity_1",
+    "applicant_ethnicity_2",
+    "applicant_ethnicity_3",
+    "applicant_ethnicity_4",
+    "applicant_ethnicity_5",
+    "co_applicant_ethnicity_1",
+    "co_applicant_ethnicity_2",
+    "co_applicant_ethnicity_3",
+    "co_applicant_ethnicity_4",
+    "co_applicant_ethnicity_5",
+    "applicant_sex",
+    "co_applicant_sex",
+    "income",
+    "purchaser_type",
+    "denial_reason_1",
+    "denial_reason_2",
+    "denial_reason_3",
+    "denial_reason_4",
+    "edit_status",
+    "sequence_number",
+    "application_date_indicator",
 ]
 
-FLOAT_DTYPES = {pl.Float32, pl.Float64}
-INTEGER_DTYPES = {
-    pl.Int8,
-    pl.Int16,
-    pl.Int32,
-    pl.Int64,
-    pl.UInt8,
-    pl.UInt16,
-    pl.UInt32,
-    pl.UInt64,
-}
+# Float columns that should be cast to Float64 for consistency
+PERIOD_2007_2017_FLOAT_COLUMNS = [
+    "rate_spread",
+    "tract_minority_population_percent",
+    "ffiec_msa_md_median_family_income", 
+    "tract_to_msa_income_percentage",
+    "tract_owner_occupied_units",
+    "tract_one_to_four_family_units",
+    "tract_median_age_of_housing_units",
+]
+
 
 
 def normalized_file_stem(stem: str) -> str:
@@ -410,326 +161,291 @@ def limit_schema_to_available_columns(
     return {column: schema[column] for column in csv_columns if column in schema}
 
 
-def _integer_like_float_columns(
-    lf: pl.LazyFrame, float_columns: Sequence[str]
-) -> list[str]:
-    """Return float columns whose non-null values are all integers."""
+# ----------------------------
+# Medallion: Bronze Builders
+# ----------------------------
 
-    if not float_columns:
-        return []
+def _schema_name_for_dataset_2007_2017(dataset: str) -> str:
+    """Return schema file base name for a given 2007–2017 dataset.
 
-    checks = [
-        (
-            pl.when(pl.col(column).is_null())
-            .then(True)
-            .otherwise(
-                pl.when(pl.col(column).is_finite())
-                .then(pl.col(column).round(0) == pl.col(column))
-                .otherwise(False)
-            )
-            .all()
-            .alias(column)
-        )
-        for column in float_columns
-    ]
-
-    if not checks:
-        return []
-
-    result = lf.select(checks).collect()
-    return [column for column in float_columns if bool(result[column][0])]
-
-
-def cast_integer_like_floats(
-    lf: pl.LazyFrame, schema: dict[str, pl.DataType | str]
-) -> pl.LazyFrame:
-    """Cast float columns with integer-only values to integer dtypes."""
-
-    float_columns = [
-        column for column, dtype in lf.schema.items() if dtype in FLOAT_DTYPES
-    ]
-    integer_like_columns = _integer_like_float_columns(lf, float_columns)
-    if not integer_like_columns:
-        return lf
-
-    casts = []
-    for column in integer_like_columns:
-        target_dtype = schema.get(column, pl.Int64)
-        if target_dtype not in INTEGER_DTYPES:
-            target_dtype = pl.Int64
-        casts.append(pl.col(column).cast(target_dtype, strict=False).alias(column))  # type: ignore[arg-type]
-
-    return lf.with_columns(casts)
-
-
-def build_hmda_lazyframe(
-    raw_file: Path,
-    delimiter: str,
-    schema: dict[str, pl.DataType | str],
-    year: int,
-    add_hmda_index: bool,
-    archive_path: Path,
-    add_file_type: bool,
-) -> pl.LazyFrame:
-    """Create a ``polars`` lazy frame for a raw HMDA delimited file.
-
-    Parameters
-    ----------
-    raw_file : Path
-        Path to the extracted delimited file
-    delimiter : str
-        Column delimiter character
-    schema : dict[str, pl.DataType]
-        Column schema dictionary
-    year : int
-        Data year
-    add_hmda_index : bool
-        Whether to add HMDA index column (not used for 2007-2017)
-    archive_path : Path
-        Path to the original archive file
-    add_file_type : bool
-        Whether to add file type column (not used for 2007-2017)
-
-    Returns
-    -------
-    pl.LazyFrame
-        Configured lazy frame for the HMDA file
+    Currently only loans are supported for this period.
     """
-    # For 2007-2017, we don't add HMDA index or file type
-    lf = pl.scan_csv(raw_file, separator=delimiter, low_memory=True, schema=schema)  # type: ignore[arg-type]
-    return cast_integer_like_floats(lf, schema)
+    if dataset == "loans":
+        return "hmda_lar_schema_2007-2017"
+    raise ValueError(f"Unsupported dataset for 2007-2017: {dataset}")
 
 
-def process_hmda_archive(
-    archive_path: Path,
-    save_path: Path,
-    schema_file: Path,
-    year: int,
-    remove_raw_file: bool,
-    add_hmda_index: bool,
-    add_file_type: bool,
-) -> None:
-    """Read, clean and persist a single HMDA archive.
-
-    Parameters
-    ----------
-    archive_path : Path
-        Path to the zip archive
-    save_path : Path
-        Path where processed file will be saved
-    schema_file : Path
-        Path to the HTML schema file
-    year : int
-        Data year
-    remove_raw_file : bool
-        Whether to remove extracted file after processing
-    add_hmda_index : bool
-        Whether to add HMDA index column (ignored for 2007-2017)
-    add_file_type : bool
-        Whether to add file type column (ignored for 2007-2017)
-    """
-    raw_file_path = Path(unzip_hmda_file(archive_path, archive_path.parent))
-    try:
-        delimiter = get_delimiter(raw_file_path, bytes=16000)
-        schema = get_file_schema(schema_file=schema_file, schema_type="polars")
-        if not isinstance(schema, dict):
-            raise ValueError(f"Expected dict schema, got {type(schema)}")
-        limited_schema = limit_schema_to_available_columns(
-            raw_file_path,
-            delimiter,
-            schema,  # type: ignore[arg-type]
-        )
-        lf = build_hmda_lazyframe(
-            raw_file=raw_file_path,
-            delimiter=delimiter,
-            schema=limited_schema,
-            year=year,
-            add_hmda_index=False,  # Always False for 2007-2017
-            add_file_type=False,   # Always False for 2007-2017
-            archive_path=archive_path,
-        )
-        lf.sink_parquet(save_path)
-    finally:
-        if remove_raw_file:
-            time.sleep(1)
-            raw_file_path.unlink(missing_ok=True)
-
-
-def import_hmda_2007_2017(
-    data_folder: Path,
-    save_folder: Path,
-    schema_file: Path,
+def build_bronze_period_2007_2017(
+    dataset: Literal["loans"],
     min_year: int = 2007,
     max_year: int = 2017,
     replace: bool = False,
-    remove_raw_file: bool = True,
 ) -> None:
+    """Create bronze parquet files for 2007–2017 data.
+
+    - Reads raw ZIPs from data/raw/<dataset>
+    - Extracts, detects delimiter, limits schema
+    - Writes one parquet per archive to data/bronze/<dataset>/period_2007_2017
     """
-    Import and clean HMDA data for 2007-2017.
+    raw_folder = RAW_DIR / dataset
+    bronze_folder = get_medallion_dir("bronze", dataset, "period_2007_2017")
+    bronze_folder.mkdir(parents=True, exist_ok=True)
 
-    This function processes HMDA zip archives from the standardized period (2007-2017).
-    Unlike post2018 data, these files do not receive HMDA index values or file type codes.
-    Unlike post2018 data, these files do not receive HMDA index values or file type codes.
-
-    Parameters
-    ----------
-    data_folder : Path
-        Folder where raw zip archives are stored.
-    save_folder : Path
-        Folder where cleaned parquet files will be saved.
-    schema_file : Path
-        Path to the HTML schema file for this period.
-    min_year : int, optional
-        First year of data to include. Default is 2007.
-    max_year : int, optional
-        Last year of data to include. Default is 2017.
-    replace : bool, optional
-        Whether to replace existing files. Default is False.
-    remove_raw_file : bool, optional
-        Whether to remove the extracted raw file after processing. Default is True.
-
-    Returns
-    -------
-    None
-        Files are written to save_folder as parquet files.
-
-    Examples
-    --------
-    >>> from hmda_data_manager.core.import_data import import_hmda_2007_2017
-    >>> import_hmda_2007_2017(
-    ...     data_folder=Path("data/raw/loans"),
-    ...     save_folder=Path("data/clean/loans"),
-    ...     schema_file=Path("schemas/hmda_lar_schema_2007-2017.html"),
-    ...     min_year=2010,
-    ...     max_year=2017
-    ... )
-    """
-    data_folder = Path(data_folder)
-    save_folder = Path(save_folder)
-    save_folder.mkdir(parents=True, exist_ok=True)
-    schema_file = Path(schema_file)
+    schema_path = get_schema_path(_schema_name_for_dataset_2007_2017(dataset))
 
     for year in range(min_year, max_year + 1):
-        archives_found = list(data_folder.glob(f"*{year}*.zip"))
-        
-        if not archives_found:
-            logger.debug("No archives found for year %s", year)
+        archives = sorted(raw_folder.glob(f"*{year}*.zip"))
+        if not archives:
+            logger.debug("No raw archives found for %s %s", dataset, year)
             continue
-            
-        for archive in archives_found:
-            file_name = normalized_file_stem(archive.stem)
-            save_file = save_folder / f"{file_name}.parquet"
 
+        for archive in archives:
+            file_stem = normalized_file_stem(archive.stem)
+            save_file = bronze_folder / f"{file_stem}.parquet"
             if not should_process_output(save_file, replace):
-                logger.debug("Skipping existing file: %s", save_file)
+                logger.debug("Skipping existing bronze file: %s", save_file)
                 continue
 
-            logger.info("Processing archive: %s", archive)
-            process_hmda_archive(
-                archive_path=archive,
-                save_path=save_file,
-                schema_file=schema_file,
-                year=year,
-                remove_raw_file=remove_raw_file,
-                add_hmda_index=False,  # No HMDA index for 2007-2017
-                add_file_type=False,   # No file type for 2007-2017
-            )
+            logger.info("[bronze 2007-2017] Processing %s", archive)
+            raw_file_path = Path(unzip_hmda_file(archive, archive.parent))
+            try:
+                delimiter = get_delimiter(raw_file_path, bytes=16000)
+
+                lf = pl.scan_csv(
+                    raw_file_path,
+                    separator=delimiter,
+                    low_memory=True,
+                    infer_schema_length=None,
+                )
+
+                # Keep bronze minimal: no renames, no derived handling
+                lf.sink_parquet(save_file)
+            finally:
+                time.sleep(1)
+                raw_file_path.unlink(missing_ok=True)
 
 
-def clean_hmda_2007_2017(
-    data_folder: Path, 
-    min_year: int = 2007, 
-    max_year: int = 2017, 
-    replace: bool = False
-) -> None:
-    """
-    Clean HMDA data for 2007-2017.
+# ----------------------------
+# Medallion: Silver Builders
+# ----------------------------
 
-    This function performs additional cleaning on already-imported 2007-2017 HMDA data,
-    including numeric type conversion and standardization.
-
+def _rename_columns_period_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Rename columns for 2007-2017 files to standardize naming.
+    
+    Handles the inconsistency where 1 file uses modern names while 11 files
+    use legacy names. This maps legacy -> modern standardized names.
+    
     Parameters
     ----------
-    data_folder : Path
-        Folder containing HMDA parquet files.
-    min_year : int, optional
-        First year to process. Default is 2007.
-    max_year : int, optional
-        Last year to process. Default is 2017.
-    replace : bool, optional
-        Overwrite existing cleaned files if True. Default is False.
-
+    lf : pl.LazyFrame
+        Input lazy frame
+        
     Returns
     -------
-    None
-        Cleaned files are saved with '_clean' suffix.
-
-    Note
-    ----
-    This function is currently incomplete - the _clean_2007_2017_file helper
-    function needs to be implemented.
-    
-    Examples
-    --------
-    >>> from hmda_data_manager.core.import_data import clean_hmda_2007_2017
-    >>> clean_hmda_2007_2017(
-    ...     data_folder=Path("data/clean/loans"),
-    ...     min_year=2010,
-    ...     max_year=2017,
-    ...     replace=True
-    ... )
+    pl.LazyFrame
+        Lazy frame with standardized column names
     """
-    data_folder = Path(data_folder)
-
-    for year in range(min_year, max_year + 1):
-        # Look for files from this year
-        files = list(data_folder.glob(f"*{year}*records*.parquet")) + list(
-            data_folder.glob(f"*{year}*public*.parquet")
-        )
-        
-        if not files:
-            logger.debug("No files found for year %s", year)
-            continue
-            
-        for file in files:
-            save_file_parquet = file.with_name(f"{file.stem}_clean.parquet")
-
-            if not should_process_output(save_file_parquet, replace):
-                logger.debug("Skipping existing cleaned file: %s", save_file_parquet)
-                continue
-
-            logger.info("Cleaning file: %s", file)
-            _clean_2007_2017_file(file, save_file_parquet, year)
-
-
-def _clean_2007_2017_file(input_file: Path, output_file: Path, year: int) -> None:
-    """
-    Clean a single 2007-2017 HMDA file.
+    rename_dict = {
+        # Legacy -> Modern standardized names
+        "as_of_year": "activity_year",
+        "applicant_income_000s": "income", 
+        "loan_amount_000s": "loan_amount",
+        "census_tract_number": "census_tract",
+        "owner_occupancy": "occupancy_type",
+        "msamd": "msa_md",
+        "population": "tract_population",
+        "minority_population": "tract_minority_population_percent",
+        "hud_median_family_income": "ffiec_msa_md_median_family_income",
+        "tract_to_msamd_income": "tract_to_msa_income_percentage",
+        "number_of_owner_occupied_units": "tract_owner_occupied_units",
+        "number_of_1_to_4_family_units": "tract_one_to_four_family_units",
+    }
     
-    This is a placeholder implementation that needs to be completed.
-    The cleaning should include:
-    - Applying destring_hmda_cols_2007_2017
-    - Dropping unnecessary columns (PRE2018_TS_DROP_COLUMNS)
-    - Standardizing data types
+    # Only rename columns that actually exist in this file
+    existing_renames = {old: new for old, new in rename_dict.items() if old in lf.columns}
+    
+    if existing_renames:
+        logger.debug("Renaming %d columns: %s", len(existing_renames), existing_renames)
+        return lf.rename(existing_renames)
+    else:
+        logger.debug("No columns to rename (already using modern names)")
+        return lf
+
+
+def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Destring numeric HMDA variables and cast to consistent types.
+    
+    Handles string values like "NA", "N/A", "Not applicable" by converting them
+    to null, then casts integer columns to Int64 and float columns to Float64.
     
     Parameters
     ----------
-    input_file : Path
-        Path to input parquet file
-    output_file : Path  
-        Path where cleaned file will be saved
-    year : int
-        Data year
+    lf : pl.LazyFrame
+        HMDA data with potentially mixed string/numeric columns
         
-    TODO
-    ----
-    This function needs to be implemented with the actual cleaning logic.
+    Returns
+    -------
+    pl.LazyFrame
+        LazyFrame with consistent Int64/Float64 types for numeric columns
     """
-    logger.warning(
-        "The _clean_2007_2017_file function is not yet implemented. "
-        "File %s was not processed.", input_file
-    )
-    # TODO: Implement the actual cleaning logic
-    # This should read the parquet file, apply cleaning transformations,
-    # and save the result
-    pass
+    logger.info("Destringing HMDA variables and casting to consistent types (2007-2017)")
+    
+    # Cast float columns to Float64 with robust NA handling
+    for col in lf.columns:
+        if col in PERIOD_2007_2017_FLOAT_COLUMNS:
+            col_dtype = lf.schema[col]
+            if col_dtype == pl.String:
+                # Handle string columns with NA values
+                lf = lf.with_columns(
+                    pl.when(
+                        pl.col(col).is_in(["NA", "N/A", "Not applicable", "Not Applicable", "na", "n/a", ""])
+                    )
+                    .then(None)
+                    .otherwise(pl.col(col))
+                    .cast(pl.Float64, strict=False)
+                    .alias(col)
+                )
+            else:
+                # Already numeric, just cast to ensure Float64
+                lf = lf.with_columns(pl.col(col).cast(pl.Float64, strict=False).alias(col))
+    
+    # Cast integer columns to Int64 with robust NA handling
+    for col in lf.columns:
+        if col in PERIOD_2007_2017_INTEGER_COLUMNS:
+            col_dtype = lf.schema[col]
+            if col_dtype == pl.String:
+                # Handle string columns with NA values
+                lf = lf.with_columns(
+                    pl.when(
+                        pl.col(col).is_in(["NA", "N/A", "Not applicable", "Not Applicable", "na", "n/a", ""])
+                    )
+                    .then(None)
+                    .otherwise(pl.col(col))
+                    .cast(pl.Int64, strict=False)
+                    .alias(col)
+                )
+            else:
+                # Already numeric, just cast to ensure Int64
+                lf = lf.with_columns(pl.col(col).cast(pl.Int64, strict=False).alias(col))
+    
+    return lf
+
+
+def _infer_pre2018_file_type_from_name(name: str) -> int:
+    """Infer a simple file_type code from a pre-2018 filename.
+
+    1 = single-year public LAR (default)
+    3 = three-year aggregate file (if 'three_year' present)
+    """
+    lower = name.lower()
+    if "three_year" in lower:
+        return 'a'
+    elif "one_year" in lower:
+        return 'b'
+    elif "public_lar" in lower:
+        return 'c'
+    elif "nationwide" in lower:
+        return 'd'
+    elif "mlar" in lower:
+        return 'e'
+    else:
+        raise ValueError(f"Unknown file type: {name}")
+
+
+def build_silver_period_2007_2017(
+    dataset: Literal["loans"],
+    min_year: int = 2007,
+    max_year: int = 2017,
+    replace: bool = False,
+    drop_tract_vars: bool = True,
+) -> None:
+    """Create hive-partitioned silver layer for 2007–2017 data.
+
+    Processes bronze parquet files one-at-a-time, applies light standardization
+    (renames and integer-friendly casting), and writes to
+    data/silver/<dataset>/period_2007_2017/activity_year=YYYY/file_type=X/.
+    
+    Parameters
+    ----------
+    dataset : {"loans"}
+        Dataset to process
+    min_year : int
+        First year to process
+    max_year : int
+        Last year to process  
+    replace : bool
+        Whether to replace existing silver files
+    drop_tract_vars : bool
+        Whether to drop tract summary variables (default True)
+    """
+    bronze_folder = get_medallion_dir("bronze", dataset, "period_2007_2017")
+    silver_folder = get_medallion_dir("silver", dataset, "period_2007_2017")
+    silver_folder.mkdir(parents=True, exist_ok=True)
+
+    if replace and silver_folder.exists():
+        # remove existing silver outputs for a clean rebuild
+        import shutil
+
+        shutil.rmtree(silver_folder)
+        silver_folder.mkdir(parents=True, exist_ok=True)
+
+    schema_path = get_schema_path(_schema_name_for_dataset_2007_2017(dataset))
+    schema = get_file_schema(schema_file=Path(schema_path), schema_type="polars")
+    if not isinstance(schema, dict):
+        raise ValueError(f"Expected dict schema, got {type(schema)}")
+
+    files_processed = 0
+    for year in range(min_year, max_year + 1):
+        for file in sorted(bronze_folder.glob(f"*{year}*.parquet")):
+            lf = pl.scan_parquet(file, low_memory=True)
+
+            # Standardize column names (legacy -> modern)
+            lf = _rename_columns_period_2007_2017(lf)
+
+            # Destring and cast integer columns to consistent Int64 types
+            lf = _destring_and_cast_hmda_cols_2007_2017(lf)
+
+            # Drop derived columns that only appear in some files (inconsistent)
+            derived_cols_to_drop = [
+                "derived_dwelling_category",
+                "derived_ethnicity", 
+                "derived_loan_product_type",
+                "derived_race",
+                "derived_sex",
+            ]
+            lf = lf.drop(derived_cols_to_drop, strict=False)
+
+            # Optionally drop tract summary variables
+            if drop_tract_vars:
+                lf = lf.drop(PERIOD_2007_2017_TRACT_COLUMNS, strict=False)
+
+            # Ensure partition keys exist
+            if "activity_year" not in lf.collect().names():
+                lf = lf.with_columns(pl.lit(year).alias("activity_year"))
+
+            file_type_code = _infer_pre2018_file_type_from_name(file.name)
+            lf = lf.with_columns(pl.lit(file_type_code).alias("file_type"))
+
+            # Validate and write using hive partitioning
+            if lf.limit(1).collect().height == 0:
+                logger.warning("Skipping empty file: %s", file)
+                continue
+
+            lf.sink_parquet(
+                pl.PartitionByKey(
+                    silver_folder,
+                    by=[pl.col("activity_year"), pl.col("file_type")],
+                    include_key=True,
+                ),
+                mkdir=True,
+            )
+            files_processed += 1
+
+    if files_processed == 0:
+        logger.info(
+            "No bronze files found for %s in %s-%s at %s",
+            dataset,
+            min_year,
+            max_year,
+            bronze_folder,
+        )

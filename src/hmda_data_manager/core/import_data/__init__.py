@@ -21,7 +21,8 @@ Modules
 Main Functions
 --------------
 - import_hmda_pre_2007: Import legacy format data
-- import_hmda_2007_2017: Import standardized format data
+- build_bronze_period_2007_2017: Create bronze layer for 2007-2017 data
+- build_silver_period_2007_2017: Create silver layer for 2007-2017 data
  
 
 Example Usage
@@ -33,7 +34,10 @@ Example Usage
 
 # Import main functions from each module
 from .pre2007 import import_hmda_pre_2007
-from .period_2007_2017 import import_hmda_2007_2017
+from .period_2007_2017 import (
+    build_bronze_period_2007_2017,
+    build_silver_period_2007_2017,
+)
 from .post2018 import (
     build_bronze_post2018,
     build_silver_post2018,
@@ -42,7 +46,9 @@ from .post2018 import (
 __all__ = [
     # Main import functions
     "import_hmda_pre_2007",
-    "import_hmda_2007_2017", 
+    # 2007-2017 medallion builders
+    "build_bronze_period_2007_2017",
+    "build_silver_period_2007_2017",
     # Post-processing functions
     "build_bronze_post2018",
     "build_silver_post2018",
