@@ -8,7 +8,6 @@ The following roadmap outlines priorities for improving code organization, consi
 - [x] Migrate to `src/hmda_data_manager/` package structure
 - [x] Create modular `core/`, `utils/`, `schemas/` subpackages  
 - [x] Implement proper `__init__.py` files with clean APIs
-- [x] Move deprecated code to `deprecated/` folder
 - [x] Create comprehensive example workflows
 
 ### Documentation & Standards (Completed)
@@ -29,13 +28,13 @@ The following roadmap outlines priorities for improving code organization, consi
 - [ ] Standardize exception classes across all modules
   - [ ] `HMDAImportError`, `HMDAValidationError`, `HMDAConfigError`
   - [ ] Consistent error messages with actionable guidance
-- [ ] Implement structured logging with different levels
-  - [ ] DEBUG: Detailed processing steps
-  - [ ] INFO: Progress and completion status  
-  - [ ] WARNING: Non-critical issues (missing optional data)
-  - [ ] ERROR: Critical failures with recovery suggestions
+- [x] Implement structured logging with different levels (basic logging implemented throughout)
+  - [x] DEBUG: Detailed processing steps (via logger.debug calls)
+  - [x] INFO: Progress and completion status (via logger.info calls)
+  - [x] WARNING: Non-critical issues (via logger.warning calls)
+  - [x] ERROR: Critical failures (via logger.error calls)
 - [ ] Add progress bars for long-running operations
-- [ ] Create centralized logging configuration
+- [ ] Create centralized logging configuration (currently using per-module logging.getLogger)
 
 ### Configuration Management
 - [ ] Expand `config.py` with comprehensive settings
@@ -48,62 +47,62 @@ The following roadmap outlines priorities for improving code organization, consi
 - [ ] Create configuration documentation and examples
 
 ### Function Standardization
-- [ ] Standardize all import function signatures
-  - [ ] Consistent parameter naming and ordering
-  - [ ] Standard return types (success/failure status)
-  - [ ] Unified keyword argument patterns
-- [ ] Implement consistent file handling patterns
-  - [ ] Standardized overwrite modes ('skip', 'overwrite', 'if_newer')
-  - [ ] Consistent temporary file management
-  - [ ] Unified file validation checks
+- [x] Standardize all import function signatures (mostly complete)
+  - [x] Consistent parameter naming and ordering (`min_year`, `max_year`, `replace` pattern)
+  - [ ] Standard return types (success/failure status) - currently returns None
+  - [x] Unified keyword argument patterns
+- [x] Implement consistent file handling patterns (mostly complete)
+  - [x] Standardized overwrite modes (`replace` boolean parameter in all build functions)
+  - [x] Consistent file existence checks (`should_process_output` helper)
+  - [ ] Unified file validation checks (ad-hoc validation exists but not centralized)
 
 ## Phase 3: Testing & Validation
 
 ### Automated Testing
-- [ ] Unit tests for all core functions
+- [ ] Unit tests for all core functions (partial)
   - [ ] Import functions with mock data
   - [ ] Configuration loading and validation
-  - [ ] Schema parsing and validation
-  - [ ] File handling edge cases
+  - [x] Schema parsing and validation (`test_get_file_schema.py`)
+  - [x] File handling edge cases (`test_cleaning_utilities.py` exists)
 - [ ] Integration tests with sample HMDA data
   - [ ] End-to-end workflow tests
   - [ ] Cross-year compatibility tests
   - [ ] Performance benchmarks
-- [ ] Data quality tests
+- [ ] Data quality tests (partial)
   - [ ] Schema compliance validation
   - [ ] Cross-reference integrity checks
-  - [ ] Statistical reasonableness tests
+  - [x] Statistical reasonableness tests (`test_cleaning_utilities.py` includes outlier tests)
 
 ### Schema Management
-- [ ] Create programmatic schema parsers for HTML files
+- [x] Create programmatic schema parsers for HTML files (`get_file_schema` in `utils/schema.py`)
 - [ ] Implement schema version detection and handling
-- [ ] Add column mapping utilities for schema changes
+- [x] Add column mapping utilities for schema changes (`rename_hmda_columns` in `utils/schema.py`)
 - [ ] Create schema comparison tools for validation
 - [ ] Build schema documentation generators
 
 ## Phase 4: HMDA-Specific Data Quality & Validation
 
 ### Automated Data Quality Checks
-- [ ] **Missing Data Analysis**
-  - [ ] Identify patterns in missing/exempt data by lender and year
+- [ ] **Missing Data Analysis** (partial - example script exists)
+  - [x] Identify patterns in missing/exempt data (`99_examine_exempt_reporters.py` example)
   - [ ] Flag unusual exemption rates or patterns
   - [ ] Generate missing data reports by geography and time
-- [ ] **Outlier Detection**
-  - [ ] Statistical outlier detection for loan amounts, income, interest rates
+- [x] **Outlier Detection** (basic implementation exists)
+  - [x] Statistical outlier detection (`flag_outliers_basic` in `utils/cleaning.py`, `99_example_hmda_outlier_detection.py`)
   - [ ] Geographic outlier identification (unusual pricing by MSA)
   - [ ] Temporal outlier detection (sudden changes in lender behavior)
 - [ ] **Cross-Year Consistency Checks**
   - [ ] Track lender panel information changes over time
   - [ ] Identify unusual year-over-year volume changes
   - [ ] Flag potential data quality issues in submissions
-- [ ] **Regulatory Compliance Validation**
+- [ ] **Regulatory Compliance Validation** (partial)
   - [ ] Check for required field completeness by lender type
-  - [ ] Validate geographic codes (state, county, census tract)
-  - [ ] Verify loan type and purpose code consistency
+  - [x] Validate geographic codes (`harmonize_census_tract` in `utils/cleaning.py`)
+  - [x] Basic plausibility checks (`apply_plausibility_filters`, `clean_rate_spread` in `utils/cleaning.py`)
 
 ### Reference Data Validation  
-- [ ] **Geographic Validation**
-  - [ ] Cross-validate census tracts with county/state codes
+- [x] **Geographic Validation** (partial)
+  - [x] Cross-validate census tracts (`harmonize_census_tract` in `utils/cleaning.py`)
   - [ ] Check MSA/MD assignments for consistency
   - [ ] Flag invalid or deprecated geographic codes
 - [ ] **Lender Information Validation**
@@ -114,39 +113,21 @@ The following roadmap outlines priorities for improving code organization, consi
 ## Performance & Scalability
 
 ### Performance & Scalability
-- [ ] **Memory Optimization**
-  - [ ] Implement chunked processing for large datasets
+- [x] **Memory Optimization** (mostly complete)
+  - [x] Implement chunked processing for large datasets (Polars LazyFrame provides lazy evaluation)
   - [ ] Memory profiling and optimization
-  - [ ] Lazy loading strategies for large files
-- [ ] **Parallel Processing**
-  - [ ] Multi-core processing for data imports
-  - [ ] Distributed processing for very large datasets
-  - [ ] GPU acceleration for statistical computations
+  - [x] Lazy loading strategies for large files (Polars LazyFrame used throughout)
 
 ## Implementation Priority
 
-**High Priority (Next 3 months):**
+**High Priority**
 - Error handling standardization
 - Comprehensive testing suite  
 - Data quality validation tools
-- Market analysis utilities
 
-**Medium Priority (Next 6 months):**
-- Advanced statistical analysis
-- Visualization and reporting tools
-- Geographic analysis capabilities
+**Medium Priority**
 - Performance optimizations
 
-**Lower Priority (Next 12 months):**
+**Lower Priority**
 - API development
-- Advanced network analysis
-- Real-time processing capabilities
 - Machine learning integration
-
-## Success Metrics
-
-- **Code Quality**: 90%+ test coverage, zero critical linting issues
-- **Documentation**: Complete API documentation, comprehensive examples
-- **Performance**: Process full HMDA dataset in <30 minutes
-- **Usability**: New users can complete analysis in <1 hour
-- **Reliability**: Handle edge cases gracefully with informative errors
