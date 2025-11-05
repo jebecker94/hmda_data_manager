@@ -49,9 +49,23 @@ This can be used in a number of ways:
 # How to Use This Project
 In order to use this project, there are a few manual steps to take before you can run the code.
 
-1. Download HMDA data
-- Navigate to the HMDA data website and download the static files you with to use.
-2. Place the zip files in the raw data folder
+## Download HMDA data
+You can get HMDA data by either:
+- Navigating to the HMDA data website and download the static files you with to use, and place the zip files in the raw folder.
+- Using the provided automated download scripts with any necessary changes to user agents, etc.
+
+### Note on data sourcing:
+Historical HMDA (pre-2007)
+
+1990–2006 HMDA
+For historical data, this project relies on the Historical Home Mortgage Disclosure Act (HMDA) Data package on openICPSR (PI: Andrew Forrester). These files convert the pre-2006 fixed-width HMDA text from the National Archives into delimited formats that are easier to analyze. DOI: 10.3886/E151921V1. Access: https://www.openicpsr.org/openicpsr/project/151921/version/V1/view
+
+Modern HMDA (2007–present)
+From 2007 onward, HMDA public data are distributed via the FFIEC/CFPB HMDA Publication platform. This repository’s code auto-downloads the 2007–present data directly from that portal. For documentation and manual access, use the FFIEC/CFPB HMDA site. 
+
+Suggested citation for historical source:
+   Forrester, Andrew. Historical Home Mortgage Disclosure Act (HMDA) Data. Ann Arbor, MI: Inter-university Consortium for Political and Social Research [distributor], V1 (2021). https://doi.org/10.3886/E151921V1
+
 
 ## Medallion Data Architecture
 
