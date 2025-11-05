@@ -1,20 +1,17 @@
 # hmda_data_manager
 Tools for managing CFPB's Home Mortgage Disclosure Act (HMDA) data for research projects.
 
-# Overview
-This project is designed to streamline the use of the HMDA data for academic research purposes.
+## Overview
+This project is designed to streamline the use of the HMDA data for academic research purposes. The HMDA data files are large and unweildy. To my knowledge, there are few resources for managing these files for use in research projects.
 
-# Motivation
-The HMDA data files are large and unweildy. To my knowledge, there are few resources for managing these files for use in research projects.
-
-# Functionality
+## Functionality
 Major functions on this project include:
 1. **Medallion Architecture ETL Pipeline**
    - Raw → Bronze → Silver data processing with consistent schemas
    - Support for all HMDA time periods: Pre-2007 [In progress], 2007-2017, and Post-2018
    - Hive-partitioned silver layer for efficient querying
 2. **Managing downloads**
-   - Automated download tools for CFPB HMDA data
+   - Automated download tools for CFPB HMDA data (post-2007)
    - Tracking changes across major revisions of files
 3. **Streamlined reading and storage**
    - Convert large files to parquet, with appropriate column types and convenient partitioning
@@ -22,10 +19,8 @@ Major functions on this project include:
    - Robust dtype casting and NA value handling
 4. **Standardizing variables, detecting outliers, and fixing data errors**
    - Year-by-reporter checks for systematic data errors (e.g., incorrect conventions for reporting rates, points+fees, etc.)
-5. **Creating derived datasets**
-   - Linking originated and purchased loans within and across years
 
-# The HMDAIndex Variable
+## The HMDAIndex Variable
 As part of the data ingestion process, these import scripts create a new variable called 'HMDAIndex' for data released starting in 2018.
 
 Construction:
@@ -37,27 +32,17 @@ The HMDAIndex variable has format YYYYt_#########, which is constructed from thr
 Purpose:
 There are no unique identifiers in the HMDA data files released starting in 2018. This makes it difficult to share code and derived datasets between researchers using their own versions of the HMDA files. The HMDAIndex variable follows a straightforward construction procedure and makes it easy for any researcher to reconsruct a unique identifier to reference specific HMDA observations in derived datasets like crosswalks.
 
-# Matching HMDA Sellers and Purchasers
-HMDA's reporting requirements mean that loans which are originated and sold to a non-GSE are reported twice--once as an originated loan (action_taken==1) and once as a purchased loan (action_taken==6).
-
-We provide preliminary matching scripts that match loan originations to subsequent loan purchases.
-
-This can be used in a number of ways:
-- Studying seller-purchaser relationships in the wholesale mortgage market
-- Improving matches between HMDA and other datasets by providing a better lender identifier for subsequent matches (e.g., matching forward to MBS transactions)
-
-# How to Use This Project
+## Project Data
 In order to use this project, there are a few manual steps to take before you can run the code.
 
-## Download HMDA data
+### Download HMDA data
 You can get HMDA data by either:
 - Navigating to the HMDA data website and download the static files you with to use, and place the zip files in the raw folder.
 - Using the provided automated download scripts with any necessary changes to user agents, etc.
 
-### Note on data sourcing:
-Historical HMDA (pre-2007)
+### Note on data sourcing
 
-1990–2006 HMDA
+Historical HMDA (pre-2007)
 For historical data, this project relies on the Historical Home Mortgage Disclosure Act (HMDA) Data package on openICPSR (PI: Andrew Forrester). These files convert the pre-2006 fixed-width HMDA text from the National Archives into delimited formats that are easier to analyze. DOI: 10.3886/E151921V1. Access: https://www.openicpsr.org/openicpsr/project/151921/version/V1/view
 
 Modern HMDA (2007–present)
@@ -66,8 +51,7 @@ From 2007 onward, HMDA public data are distributed via the FFIEC/CFPB HMDA Publi
 Suggested citation for historical source:
    Forrester, Andrew. Historical Home Mortgage Disclosure Act (HMDA) Data. Ann Arbor, MI: Inter-university Consortium for Political and Social Research [distributor], V1 (2021). https://doi.org/10.3886/E151921V1
 
-
-## Medallion Data Architecture
+## Data Details: Medallion Data Architecture
 
 This package implements a modern medallion architecture for HMDA data processing:
 
