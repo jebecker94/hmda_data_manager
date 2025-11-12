@@ -74,6 +74,7 @@ POST2018_INTEGER_COLUMNS = [
     "loan_amount",
     "action_taken",
     "msa_md",
+    "loan_term",
     "derived_msa_md",
     "applicant_race_1",
     "applicant_race_2",
@@ -118,6 +119,7 @@ POST2018_INTEGER_COLUMNS = [
     "tract_owner_occupied_units",
     "tract_one_to_four_family_homes",
     "tract_median_age_of_housing_units",
+    "conforming_loan_limit",
 ]
 
 POST2018_EXEMPT_COLUMNS = [
@@ -287,7 +289,6 @@ def _destring_and_cast_hmda_cols_post2018(
         LazyFrame with numeric fields cast to appropriate numeric types and
         integer-like floats downcast to integers.
     """
-    logger.info("Destringing HMDA variables and casting integer-like floats")
 
     # Replace exempt columns with -99999
     for exempt_col in POST2018_EXEMPT_COLUMNS:
@@ -345,14 +346,14 @@ def _destring_and_cast_hmda_cols_post2018(
         .alias(replace_column)
     )
 
-    # # Clean Conforming Loan Limit (Leave as string for now)
-    # replace_column = "conforming_loan_limit"
-    # lf = lf.with_columns(
-    #     pl.col(replace_column)
-    #     .replace(["NC", "C", "U", "NA"], [0, 1, 1111, -1111])
-    #     .cast(pl.Int64, strict=False)
-    #     .alias(replace_column)
-    # )
+    # Clean Conforming Loan Limit (Leave as string for now)
+    replace_column = "conforming_loan_limit"
+    lf = lf.with_columns(
+        pl.col(replace_column)
+        .replace(["NC", "C", "U", "NA"], [0, 1, -99999, -99999])
+        .cast(pl.Int64, strict=False)
+        .alias(replace_column)
+    )
 
     # Cast safe strings to floats
     lf_columns = lf.collect_schema().names()
