@@ -40,11 +40,10 @@ table_name = 'loans')
 df_county = df.sql('''
 SELECT DISTINCT activity_year, state_code, county_code, COUNT(*) AS count
 FROM loans
-WHERE HMDAIndex LIKE '%a_%'
 GROUP BY activity_year, state_code, county_code
 ORDER BY activity_year, state_code, county_code
 ''',
-table_name = 'loans')
+table_name = 'loans').collect()
 
 # Show the results
 df = df.collect()

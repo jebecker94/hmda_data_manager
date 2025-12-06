@@ -67,10 +67,6 @@ def limit_schema_to_available_columns(
     return {column: schema[column] for column in csv_columns if column in schema}
 
 
-# ----------------------------
-# Medallion: Bronze Builders
-# ----------------------------
-
 def _schema_name_for_dataset_2007_2017(dataset: str) -> str:
     """Return schema file base name for a given 2007–2017 dataset.
 
@@ -80,10 +76,6 @@ def _schema_name_for_dataset_2007_2017(dataset: str) -> str:
         return "hmda_lar_schema_2007-2017"
     raise ValueError(f"Unsupported dataset for 2007-2017: {dataset}")
 
-
-# ----------------------------
-# Medallion: Silver Builders
-# ----------------------------
 
 def _rename_columns_period_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Rename columns for 2007-2017 files to standardize naming.

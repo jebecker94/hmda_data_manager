@@ -198,6 +198,17 @@ def _harmonize_schema(lf: pl.LazyFrame) -> pl.LazyFrame:
             )
         )
 
+    # Standardize county_code column format (if present)
+    if "county_code" in lf_columns:
+        lf = (
+            lf.cast({"county_code": pl.Float64}, strict=False)
+            .cast({"county_code": pl.Int64}, strict=False)
+            .cast({"county_code": pl.String}, strict=False)
+            .with_columns(
+                pl.col("county_code").str.zfill(5).alias("county_code")
+            )
+        )
+
     return lf
 
 
