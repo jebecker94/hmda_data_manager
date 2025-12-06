@@ -7,7 +7,7 @@ fields, and more complex data structures.
 
 Key Characteristics:
 - HMDAIndex unique identifier system
-- File type codes (a, b, c, d, e)
+- File type codes (a, b, c, e)
 - Derived demographic columns
 - Extensive tract variables
 - More complex schema with many optional fields
@@ -109,8 +109,6 @@ def _get_file_type_code(file_name: Path | str) -> str:
         or "public_ts" in base_name_lower
     ):
         return "c"
-    elif "nationwide" in base_name_lower:
-        return "d"
     elif "mlar" in base_name_lower:
         return "e"
     raise ValueError("Cannot parse the HMDA file type from the provided file name.")
