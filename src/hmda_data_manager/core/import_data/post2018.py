@@ -19,15 +19,11 @@ import logging
 import shutil
 import time
 from collections.abc import Sequence
-import time
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 import polars as pl
 from ...utils.io import get_delimiter, unzip_hmda_file
-from ...utils.schema import get_file_schema
 from ..config import RAW_DIR, get_medallion_dir
-from ...schemas import get_schema_path
 
 
 logger = logging.getLogger(__name__)
@@ -178,32 +174,6 @@ def should_process_output(path: Path, replace: bool) -> bool:
     return replace or not path.exists()
 
 
-def _limit_schema_to_available_columns(
-    raw_file: Path, delimiter: str, schema: dict[str, pl.DataType | str]
-) -> dict[str, pl.DataType | str]:
-    """Restrict a schema to the columns available in a delimited file.
-
-    Parameters
-    ----------
-    raw_file : Path
-        Path to the raw CSV/delimited file
-    delimiter : str
-        Column delimiter character
-    schema : dict[str, pl.DataType | str]
-        Full schema dictionary
-
-    Returns
-    -------
-    dict[str, pl.DataType | str]
-        Schema restricted to available columns
-    """
-    csv_columns = pl.read_csv(
-        raw_file, separator=delimiter, n_rows=0, ignore_errors=True
-    ).columns
-    logger.debug("CSV columns: %s", csv_columns)
-    return {column: schema[column] for column in csv_columns if column in schema}
-
-
 def _get_file_type_code(file_name: Path | str) -> str:
     """Derive the HMDA file type code from a file name.
 
@@ -244,37 +214,15 @@ def _get_file_type_code(file_name: Path | str) -> str:
     raise ValueError("Cannot parse the HMDA file type from the provided file name.")
 
 
-def _format_census_tract(lf: pl.LazyFrame) -> pl.LazyFrame:
-    """Standardize the census tract column within a lazy frame.
-
-    Parameters
-    ----------
-    lf : pl.LazyFrame
-        Input lazy frame with census tract column
-
-    Returns
-    -------
-    pl.LazyFrame
-        Lazy frame with standardized census tract column
+def _harmonize_schema(lf: pl.LazyFrame) -> pl.LazyFrame:
     """
-    return (
-        lf.cast({"census_tract": pl.Float64}, strict=False)
-        .cast({"census_tract": pl.Int64}, strict=False)
-        .cast({"census_tract": pl.String}, strict=False)
-        .with_columns(
-            pl.col("census_tract").str.zfill(11).alias("census_tract")
-        )
-    )
+    Harmonize schema for post-2018 HMDA data.
 
-
-def _destring_and_cast_hmda_cols_post2018(
-    lf: pl.LazyFrame, schema: dict[str, pl.DataType | str] | None = None
-) -> pl.LazyFrame:
-    """
-    Destring numeric HMDA variables and cast integer-like floats to integers.
-
-    This consolidates destringing and integer coercion to reduce redundancy and
-    improve performance.
+    This function consolidates all schema transformations including:
+    - Destringing numeric variables
+    - Casting integer-like floats to integers
+    - Standardizing census tract format
+    - Handling exempt/special values
 
     Parameters
     ----------
@@ -286,8 +234,8 @@ def _destring_and_cast_hmda_cols_post2018(
     Returns
     -------
     pl.LazyFrame
-        LazyFrame with numeric fields cast to appropriate numeric types and
-        integer-like floats downcast to integers.
+        LazyFrame with harmonized schema including properly typed numeric fields
+        and formatted census tract column.
     """
 
     # Replace exempt columns with -99999
@@ -372,6 +320,17 @@ def _destring_and_cast_hmda_cols_post2018(
                 .alias(column)
             )
 
+    # Standardize census_tract column format (if present)
+    if "census_tract" in lf_columns:
+        lf = (
+            lf.cast({"census_tract": pl.Float64}, strict=False)
+            .cast({"census_tract": pl.Int64}, strict=False)
+            .cast({"census_tract": pl.String}, strict=False)
+            .with_columns(
+                pl.col("census_tract").str.zfill(11).alias("census_tract")
+            )
+        )
+
     return lf
 
 
@@ -410,7 +369,7 @@ def _append_hmda_index(
         )
     )
 
-def _rename_columns_post2018(lf: pl.LazyFrame) -> pl.LazyFrame:
+def _rename_columns(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Rename columns for post2018 files to standardize naming.
 
     Note: If other errors in the variable names are discovered, add them here.
@@ -458,10 +417,6 @@ def build_bronze_post2018(
     bronze_folder = get_medallion_dir("bronze", dataset, "post2018")
     bronze_folder.mkdir(parents=True, exist_ok=True)
 
-    # Determine schema and index settings per dataset
-    schema_path = get_schema_path(_schema_name_for_dataset(dataset))
-    add_hmda_index = dataset == "loans"
-
     for year in range(min_year, max_year + 1):
         archives_found = list(raw_folder.glob(f"*{year}*.zip"))
         if not archives_found:
@@ -482,33 +437,18 @@ def build_bronze_post2018(
             # Extract and process the archive
             raw_file_path = Path(unzip_hmda_file(archive, archive.parent))
             try:
-                # Detect delimiter and load schema
+                # Detect delimiter
                 delimiter = get_delimiter(raw_file_path, bytes=16000)
-                schema = get_file_schema(schema_file=Path(schema_path), schema_type="polars")
-                if not isinstance(schema, dict):
-                    raise ValueError(f"Expected dict schema, got {type(schema)}")
-                limited_schema = _limit_schema_to_available_columns(
-                    raw_file_path,
-                    delimiter,
-                    schema,  # type: ignore[arg-type]
-                )
 
                 # Build lazyframe; add row index only when creating HMDAIndex
-                if add_hmda_index:
-                    lf = pl.scan_csv(
-                        raw_file_path,
-                        separator=delimiter,
-                        low_memory=True,
-                        row_index_name=HMDA_INDEX_COLUMN,
-                        infer_schema_length=None,
-                    )
-                else:
-                    lf = pl.scan_csv(
-                        raw_file_path,
-                        separator=delimiter,
-                        low_memory=True,
-                        infer_schema_length=None,
-                    )
+                index_name = HMDA_INDEX_COLUMN if (dataset == "loans") else None
+                lf = pl.scan_csv(
+                    raw_file_path,
+                    separator=delimiter,
+                    low_memory=True,
+                    row_index_name=index_name,
+                    infer_schema_length=None,
+                )
 
                 # Add file_type and HMDAIndex if requested
                 file_type_code = _get_file_type_code(archive)
@@ -551,28 +491,16 @@ def build_silver_post2018(
         shutil.rmtree(silver_folder)
         silver_folder.mkdir(parents=True, exist_ok=True)
 
-    # Load schema for consistent typing across files
-    schema_path = get_schema_path(_schema_name_for_dataset(dataset))
-    schema = get_file_schema(schema_file=Path(schema_path), schema_type="polars")
-    if not isinstance(schema, dict):
-        raise ValueError(f"Expected dict schema, got {type(schema)}")
-
-    files_processed = 0
     for year in range(min_year, max_year + 1):
         for file in bronze_folder.glob(f"*{year}*.parquet"):
             lf = pl.scan_parquet(file, low_memory=True)
 
             # Apply renames and conversions
             if dataset == "loans":
-                lf = _rename_columns_post2018(lf)
-                lf = _destring_and_cast_hmda_cols_post2018(lf, schema)
-                lf = _format_census_tract(lf)
+                lf = _rename_columns(lf)
+                lf = _harmonize_schema(lf)
 
-            # Validate non-empty then write using hive partitioning
-            if lf.limit(1).collect().height == 0:
-                logger.warning("Skipping empty file: %s", file)
-                continue
-
+            # Write using hive partitioning
             lf.sink_parquet(
                 pl.PartitionByKey(
                     silver_folder,
@@ -581,7 +509,3 @@ def build_silver_post2018(
                 ),
                 mkdir=True,
             )
-            files_processed += 1
-
-    if files_processed == 0:
-        logger.info("No bronze files found for %s in %s-%s", dataset, min_year, max_year)
