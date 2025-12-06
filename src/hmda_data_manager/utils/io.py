@@ -13,6 +13,44 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def normalized_file_stem(stem: str) -> str:
+    """Remove common suffixes from extracted archive names.
+
+    Parameters
+    ----------
+    stem : str
+        File stem (name without extension)
+
+    Returns
+    -------
+    str
+        Normalized file stem with common suffixes removed
+    """
+    if stem.endswith("_csv"):
+        stem = stem[:-4]
+    if stem.endswith("_pipe"):
+        stem = stem[:-5]
+    return stem
+
+
+def should_process_output(path: Path, replace: bool) -> bool:
+    """Return True when the target path should be generated.
+
+    Parameters
+    ----------
+    path : Path
+        Target output file path
+    replace : bool
+        Whether to replace existing files
+
+    Returns
+    -------
+    bool
+        True if file should be processed
+    """
+    return replace or not path.exists()
+
+
 def get_delimiter(file_path: Path | str, bytes: int = 4096) -> str:
     """Determine the delimiter used in a delimited text file."""
     sniffer = Sniffer()
@@ -96,6 +134,8 @@ def unzip_hmda_file(
 
 
 __all__ = [
+    "normalized_file_stem",
+    "should_process_output",
     "get_delimiter",
     "replace_csv_column_names",
     "unzip_hmda_file",

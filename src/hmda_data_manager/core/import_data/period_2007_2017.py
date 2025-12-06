@@ -22,7 +22,12 @@ from pathlib import Path
 import polars as pl
 import pandas as pd
 from typing import Literal
-from ...utils.io import get_delimiter, unzip_hmda_file
+from ...utils.io import (
+    get_delimiter,
+    unzip_hmda_file,
+    normalized_file_stem,
+    should_process_output,
+)
 from ...utils.schema import get_file_schema, rename_hmda_columns
 from ...schemas import get_schema_path
 from ..config import (
@@ -34,45 +39,6 @@ from ..config import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-
-def normalized_file_stem(stem: str) -> str:
-    """Remove common suffixes from extracted archive names.
-
-    Parameters
-    ----------
-    stem : str
-        File stem (name without extension)
-
-    Returns
-    -------
-    str
-        Normalized file stem with common suffixes removed
-    """
-    if stem.endswith("_csv"):
-        stem = stem[:-4]
-    if stem.endswith("_pipe"):
-        stem = stem[:-5]
-    return stem
-
-
-def should_process_output(path: Path, replace: bool) -> bool:
-    """Return ``True`` when the target path should be generated.
-
-    Parameters
-    ----------
-    path : Path
-        Target output file path
-    replace : bool
-        Whether to replace existing files
-
-    Returns
-    -------
-    bool
-        True if file should be processed
-    """
-    return replace or not path.exists()
 
 
 def limit_schema_to_available_columns(
@@ -113,56 +79,6 @@ def _schema_name_for_dataset_2007_2017(dataset: str) -> str:
     if dataset == "loans":
         return "hmda_lar_schema_2007-2017"
     raise ValueError(f"Unsupported dataset for 2007-2017: {dataset}")
-
-
-def build_bronze_period_2007_2017(
-    dataset: Literal["loans"],
-    min_year: int = 2007,
-    max_year: int = 2017,
-    replace: bool = False,
-) -> None:
-    """Create bronze parquet files for 2007–2017 data.
-
-    - Reads raw ZIPs from data/raw/<dataset>
-    - Extracts, detects delimiter, limits schema
-    - Writes one parquet per archive to data/bronze/<dataset>/period_2007_2017
-    """
-    raw_folder = RAW_DIR / dataset
-    bronze_folder = get_medallion_dir("bronze", dataset, "period_2007_2017")
-    bronze_folder.mkdir(parents=True, exist_ok=True)
-
-    schema_path = get_schema_path(_schema_name_for_dataset_2007_2017(dataset))
-
-    for year in range(min_year, max_year + 1):
-        archives = sorted(raw_folder.glob(f"*{year}*.zip"))
-        if not archives:
-            logger.debug("No raw archives found for %s %s", dataset, year)
-            continue
-
-        for archive in archives:
-            file_stem = normalized_file_stem(archive.stem)
-            save_file = bronze_folder / f"{file_stem}.parquet"
-            if not should_process_output(save_file, replace):
-                logger.debug("Skipping existing bronze file: %s", save_file)
-                continue
-
-            logger.info("[bronze 2007-2017] Processing %s", archive)
-            raw_file_path = Path(unzip_hmda_file(archive, archive.parent))
-            try:
-                delimiter = get_delimiter(raw_file_path, bytes=16000)
-
-                lf = pl.scan_csv(
-                    raw_file_path,
-                    separator=delimiter,
-                    low_memory=True,
-                    infer_schema_length=None,
-                )
-
-                # Keep bronze minimal: no renames, no derived handling
-                lf.sink_parquet(save_file)
-            finally:
-                time.sleep(1)
-                raw_file_path.unlink(missing_ok=True)
 
 
 # ----------------------------
@@ -290,6 +206,56 @@ def _infer_pre2018_file_type_from_name(name: str) -> int:
         return 'e'
     else:
         raise ValueError(f"Unknown file type: {name}")
+
+
+def build_bronze_period_2007_2017(
+    dataset: Literal["loans"],
+    min_year: int = 2007,
+    max_year: int = 2017,
+    replace: bool = False,
+) -> None:
+    """Create bronze parquet files for 2007–2017 data.
+
+    - Reads raw ZIPs from data/raw/<dataset>
+    - Extracts, detects delimiter, limits schema
+    - Writes one parquet per archive to data/bronze/<dataset>/period_2007_2017
+    """
+    raw_folder = RAW_DIR / dataset
+    bronze_folder = get_medallion_dir("bronze", dataset, "period_2007_2017")
+    bronze_folder.mkdir(parents=True, exist_ok=True)
+
+    schema_path = get_schema_path(_schema_name_for_dataset_2007_2017(dataset))
+
+    for year in range(min_year, max_year + 1):
+        archives = sorted(raw_folder.glob(f"*{year}*.zip"))
+        if not archives:
+            logger.debug("No raw archives found for %s %s", dataset, year)
+            continue
+
+        for archive in archives:
+            file_stem = normalized_file_stem(archive.stem)
+            save_file = bronze_folder / f"{file_stem}.parquet"
+            if not should_process_output(save_file, replace):
+                logger.debug("Skipping existing bronze file: %s", save_file)
+                continue
+
+            logger.info("[bronze 2007-2017] Processing %s", archive)
+            raw_file_path = Path(unzip_hmda_file(archive, archive.parent))
+            try:
+                delimiter = get_delimiter(raw_file_path, bytes=16000)
+
+                lf = pl.scan_csv(
+                    raw_file_path,
+                    separator=delimiter,
+                    low_memory=True,
+                    infer_schema_length=None,
+                )
+
+                # Keep bronze minimal: no renames, no derived handling
+                lf.sink_parquet(save_file)
+            finally:
+                time.sleep(1)
+                raw_file_path.unlink(missing_ok=True)
 
 
 def build_silver_period_2007_2017(

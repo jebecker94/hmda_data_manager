@@ -22,7 +22,12 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 import polars as pl
-from ...utils.io import get_delimiter, unzip_hmda_file
+from ...utils.io import (
+    get_delimiter,
+    unzip_hmda_file,
+    normalized_file_stem,
+    should_process_output,
+)
 from ..config import (
     RAW_DIR,
     get_medallion_dir,
@@ -36,44 +41,6 @@ from ..config import (
 
 
 logger = logging.getLogger(__name__)
-
-
-def normalized_file_stem(stem: str) -> str:
-    """Remove common suffixes from extracted archive names.
-
-    Parameters
-    ----------
-    stem : str
-        File stem (name without extension)
-
-    Returns
-    -------
-    str
-        Normalized file stem with common suffixes removed
-    """
-    if stem.endswith("_csv"):
-        stem = stem[:-4]
-    if stem.endswith("_pipe"):
-        stem = stem[:-5]
-    return stem
-
-
-def should_process_output(path: Path, replace: bool) -> bool:
-    """Return ``True`` when the target path should be generated.
-
-    Parameters
-    ----------
-    path : Path
-        Target output file path
-    replace : bool
-        Whether to replace existing files
-
-    Returns
-    -------
-    bool
-        True if file should be processed
-    """
-    return replace or not path.exists()
 
 
 def _get_file_type_code(file_name: Path | str) -> str:
