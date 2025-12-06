@@ -23,117 +23,19 @@ from pathlib import Path
 from typing import Literal
 import polars as pl
 from ...utils.io import get_delimiter, unzip_hmda_file
-from ..config import RAW_DIR, get_medallion_dir
+from ..config import (
+    RAW_DIR,
+    get_medallion_dir,
+    HMDA_INDEX_COLUMN,
+    DERIVED_COLUMNS,
+    POST2018_TRACT_COLUMNS,
+    POST2018_FLOAT_COLUMNS,
+    POST2018_INTEGER_COLUMNS,
+    POST2018_EXEMPT_COLUMNS,
+)
 
 
 logger = logging.getLogger(__name__)
-
-
-# Constants specific to post2018 data
-HMDA_INDEX_COLUMN = "HMDAIndex"
-DERIVED_COLUMNS = [
-    "derived_loan_product_type",
-    "derived_race",
-    "derived_ethnicity",
-    "derived_sex",
-    "derived_dwelling_category",
-]
-
-POST2018_TRACT_COLUMNS = [
-    "tract_population",
-    "tract_minority_population_percent",
-    "ffiec_msa_md_median_family_income",
-    "tract_to_msa_income_percentage",
-    "tract_owner_occupied_units",
-    "tract_one_to_four_family_homes",
-    "tract_median_age_of_housing_units",
-]
-
-POST2018_FLOAT_COLUMNS = [
-    "interest_rate",
-    "combined_loan_to_value_ratio",
-    "rate_spread",
-    "total_loan_costs",
-    "total_points_and_fees",
-    "origination_charges",
-    "discount_points",
-    "lender_credits",
-    "tract_minority_population_percent",
-    "ffiec_msa_md_median_family_income",
-    "tract_to_msa_income_percentage",
-]
-
-POST2018_INTEGER_COLUMNS = [
-    "loan_type",
-    "loan_purpose",
-    "occupancy_type",
-    "loan_amount",
-    "action_taken",
-    "msa_md",
-    "loan_term",
-    "derived_msa_md",
-    "applicant_race_1",
-    "applicant_race_2",
-    "applicant_race_3",
-    "applicant_race_4",
-    "applicant_race_5",
-    "co_applicant_race_1",
-    "co_applicant_race_2",
-    "co_applicant_race_3",
-    "co_applicant_race_4",
-    "co_applicant_race_5",
-    "applicant_ethnicity_1",
-    "applicant_ethnicity_2",
-    "applicant_ethnicity_3",
-    "applicant_ethnicity_4",
-    "applicant_ethnicity_5",
-    "co_applicant_ethnicity_1",
-    "co_applicant_ethnicity_2",
-    "co_applicant_ethnicity_3",
-    "co_applicant_ethnicity_4",
-    "co_applicant_ethnicity_5",
-    "applicant_sex",
-    "co_applicant_sex",
-    "income",
-    "multifamily_affordable_units",
-    "property_value",
-    "prepayment_penalty_term",
-    "intro_rate_period",
-    "purchaser_type",
-    "submission_of_application",
-    "initially_payable_to_institution",
-    "aus_1",
-    "aus_2",
-    "aus_3",
-    "aus_4",
-    "aus_5",
-    "denial_reason_1",
-    "denial_reason_2",
-    "denial_reason_3",
-    "denial_reason_4",
-    "tract_population",
-    "tract_owner_occupied_units",
-    "tract_one_to_four_family_homes",
-    "tract_median_age_of_housing_units",
-    "conforming_loan_limit",
-]
-
-POST2018_EXEMPT_COLUMNS = [
-    "combined_loan_to_value_ratio",
-    "interest_rate",
-    "rate_spread",
-    "loan_term",
-    "prepayment_penalty_term",
-    "intro_rate_period",
-    "income",
-    "multifamily_affordable_units",
-    "property_value",
-    "total_loan_costs",
-    "total_points_and_fees",
-    "origination_charges",
-    "discount_points",
-    "lender_credits",
-]
 
 
 def normalized_file_stem(stem: str) -> str:
@@ -417,6 +319,8 @@ def build_bronze_post2018(
     bronze_folder = get_medallion_dir("bronze", dataset, "post2018")
     bronze_folder.mkdir(parents=True, exist_ok=True)
 
+    add_hmda_index = dataset == "loans"
+
     for year in range(min_year, max_year + 1):
         archives_found = list(raw_folder.glob(f"*{year}*.zip"))
         if not archives_found:
@@ -441,7 +345,7 @@ def build_bronze_post2018(
                 delimiter = get_delimiter(raw_file_path, bytes=16000)
 
                 # Build lazyframe; add row index only when creating HMDAIndex
-                index_name = HMDA_INDEX_COLUMN if (dataset == "loans") else None
+                index_name = HMDA_INDEX_COLUMN if add_hmda_index else None
                 lf = pl.scan_csv(
                     raw_file_path,
                     separator=delimiter,

@@ -17,8 +17,9 @@ The modules will be populated during migration from root-level scripts:
 - config.py -> config.py (migrated)
 """
 
-# Import configuration constants
+# Import configuration constants and data column lists
 from .config import (
+    # Path configuration
     PROJECT_DIR,
     DATA_DIR,
     RAW_DIR,
@@ -26,6 +27,17 @@ from .config import (
     BRONZE_DIR,
     SILVER_DIR,
     get_medallion_dir,
+    # Post-2018 constants
+    HMDA_INDEX_COLUMN,
+    DERIVED_COLUMNS,
+    POST2018_TRACT_COLUMNS,
+    POST2018_FLOAT_COLUMNS,
+    POST2018_INTEGER_COLUMNS,
+    POST2018_EXEMPT_COLUMNS,
+    # 2007-2017 constants
+    PERIOD_2007_2017_TRACT_COLUMNS,
+    PERIOD_2007_2017_INTEGER_COLUMNS,
+    PERIOD_2007_2017_FLOAT_COLUMNS,
 )
 
 # Import data import functions
@@ -45,22 +57,31 @@ from .download import (
 )
 
 __all__ = [
-    # Configuration
+    # Path configuration
     "PROJECT_DIR",
-    "DATA_DIR", 
+    "DATA_DIR",
     "RAW_DIR",
     "CLEAN_DIR",
     "BRONZE_DIR",
     "SILVER_DIR",
     "get_medallion_dir",
-    
+    # Post-2018 constants
+    "HMDA_INDEX_COLUMN",
+    "DERIVED_COLUMNS",
+    "POST2018_TRACT_COLUMNS",
+    "POST2018_FLOAT_COLUMNS",
+    "POST2018_INTEGER_COLUMNS",
+    "POST2018_EXEMPT_COLUMNS",
+    # 2007-2017 constants
+    "PERIOD_2007_2017_TRACT_COLUMNS",
+    "PERIOD_2007_2017_INTEGER_COLUMNS",
+    "PERIOD_2007_2017_FLOAT_COLUMNS",
     # Import functions
     "import_hmda_pre_2007",
     "build_bronze_period_2007_2017",
     "build_silver_period_2007_2017",
     "build_bronze_post2018",
     "build_silver_post2018",
-    
     # Download functions
     "download_zip_files_from_url",
     "download_hmda_files",

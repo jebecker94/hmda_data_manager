@@ -25,75 +25,15 @@ from typing import Literal
 from ...utils.io import get_delimiter, unzip_hmda_file
 from ...utils.schema import get_file_schema, rename_hmda_columns
 from ...schemas import get_schema_path
-from ..config import RAW_DIR, get_medallion_dir
+from ..config import (
+    RAW_DIR,
+    get_medallion_dir,
+    PERIOD_2007_2017_TRACT_COLUMNS,
+    PERIOD_2007_2017_INTEGER_COLUMNS,
+    PERIOD_2007_2017_FLOAT_COLUMNS,
+)
 
 logger = logging.getLogger(__name__)
-
-
-# Constants specific to 2007-2017 data
-# Tract summary variables to optionally drop in silver layer
-PERIOD_2007_2017_TRACT_COLUMNS = [
-    "tract_population",
-    "tract_minority_population_percent", 
-    "ffiec_msa_md_median_family_income",
-    "tract_to_msa_income_percentage",
-    "tract_owner_occupied_units",
-    "tract_one_to_four_family_units",
-    "tract_median_age_of_housing_units",
-]
-
-# Integer columns that need consistent Int64 casting (based on audit findings)
-PERIOD_2007_2017_INTEGER_COLUMNS = [
-    "activity_year",
-    "loan_type", 
-    "loan_purpose",
-    "occupancy_type",
-    "loan_amount",
-    "action_taken",
-    "msa_md",
-    "applicant_race_1",
-    "applicant_race_2",
-    "applicant_race_3", 
-    "applicant_race_4",
-    "applicant_race_5",
-    "co_applicant_race_1",
-    "co_applicant_race_2",
-    "co_applicant_race_3",
-    "co_applicant_race_4", 
-    "co_applicant_race_5",
-    "applicant_ethnicity_1",
-    "applicant_ethnicity_2",
-    "applicant_ethnicity_3",
-    "applicant_ethnicity_4",
-    "applicant_ethnicity_5",
-    "co_applicant_ethnicity_1",
-    "co_applicant_ethnicity_2",
-    "co_applicant_ethnicity_3",
-    "co_applicant_ethnicity_4",
-    "co_applicant_ethnicity_5",
-    "applicant_sex",
-    "co_applicant_sex",
-    "income",
-    "purchaser_type",
-    "denial_reason_1",
-    "denial_reason_2",
-    "denial_reason_3",
-    "denial_reason_4",
-    "edit_status",
-    "sequence_number",
-    "application_date_indicator",
-]
-
-# Float columns that should be cast to Float64 for consistency
-PERIOD_2007_2017_FLOAT_COLUMNS = [
-    "rate_spread",
-    "tract_minority_population_percent",
-    "ffiec_msa_md_median_family_income", 
-    "tract_to_msa_income_percentage",
-    "tract_owner_occupied_units",
-    "tract_one_to_four_family_units",
-    "tract_median_age_of_housing_units",
-]
 
 
 
