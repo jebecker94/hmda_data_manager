@@ -73,7 +73,7 @@ def _rename_columns_period_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
     }
     
     # Only rename columns that actually exist in this file
-    existing_renames = {old: new for old, new in rename_dict.items() if old in lf.columns}
+    existing_renames = {old: new for old, new in rename_dict.items() if old in lf.collect_schema().names()}
     
     if existing_renames:
         logger.debug("Renaming %d columns: %s", len(existing_renames), existing_renames)
@@ -106,7 +106,7 @@ def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
     logger.info("Destringing HMDA variables and casting to consistent types (2007-2017)")
 
     # Cast float columns to Float64
-    float_cols_to_cast = [col for col in lf.columns if col in PERIOD_2007_2017_FLOAT_COLUMNS]
+    float_cols_to_cast = [col for col in lf.collect_schema().names() if col in PERIOD_2007_2017_FLOAT_COLUMNS]
     if float_cols_to_cast:
         lf = lf.with_columns([
             pl.col(col).cast(pl.Float64, strict=False).alias(col)
@@ -115,7 +115,7 @@ def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
 
     # Cast integer columns to Int64
     int_cols_to_cast = [
-        col for col in lf.columns
+        col for col in lf.collect_schema().names()
         if col in PERIOD_2007_2017_INTEGER_COLUMNS
     ]
     if int_cols_to_cast:
@@ -125,7 +125,7 @@ def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
         ])
 
     # Special handling: loan_amount stored in thousands, multiply by 1000
-    if "loan_amount" in lf.columns:
+    if "loan_amount" in lf.collect_schema().names():
         lf = lf.with_columns(
             pl.col("loan_amount")
             .mul(1000)
@@ -133,7 +133,7 @@ def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
         )
 
     # Special handling: income stored in thousands, multiply by 1000
-    if "income" in lf.columns:
+    if "income" in lf.collect_schema().names():
         lf = lf.with_columns(
             pl.col("income")
             .mul(1000)
@@ -357,7 +357,7 @@ def build_silver_period_2007_2017(
                 lf = lf.drop(PERIOD_2007_2017_TRACT_COLUMNS, strict=False)
 
             # Ensure partition keys exist
-            if "activity_year" not in lf.collect().names():
+            if "activity_year" not in lf.collect_schema().names():
                 lf = lf.with_columns(pl.lit(year).alias("activity_year"))
 
             file_type_code = _infer_pre2018_file_type_from_name(file.name)
