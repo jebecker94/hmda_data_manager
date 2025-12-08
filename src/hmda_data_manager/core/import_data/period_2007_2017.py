@@ -17,64 +17,27 @@ This module is relatively stable since the 2007-2017 data format is finalized.
 
 import logging
 import time
-from collections.abc import Sequence
 from pathlib import Path
-import polars as pl
-import pandas as pd
 from typing import Literal
+
+import polars as pl
+
 from ...utils.io import (
     get_delimiter,
     unzip_hmda_file,
     normalized_file_stem,
     should_process_output,
 )
-from ...utils.schema import get_file_schema, rename_hmda_columns
-from ...schemas import get_schema_path
 from ..config import (
     RAW_DIR,
     get_medallion_dir,
+    DERIVED_COLUMNS,
     PERIOD_2007_2017_TRACT_COLUMNS,
     PERIOD_2007_2017_INTEGER_COLUMNS,
     PERIOD_2007_2017_FLOAT_COLUMNS,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def limit_schema_to_available_columns(
-    raw_file: Path, delimiter: str, schema: dict[str, pl.DataType | str]
-) -> dict[str, pl.DataType | str]:
-    """Restrict a schema to the columns available in a delimited file.
-
-    Parameters
-    ----------
-    raw_file : Path
-        Path to the raw CSV/delimited file
-    delimiter : str
-        Column delimiter character
-    schema : dict[str, pl.DataType | str]
-        Full schema dictionary
-
-    Returns
-    -------
-    dict[str, pl.DataType | str]
-        Schema restricted to available columns
-    """
-    csv_columns = pl.read_csv(
-        raw_file, separator=delimiter, n_rows=0, ignore_errors=True
-    ).columns
-    logger.debug("CSV columns: %s", csv_columns)
-    return {column: schema[column] for column in csv_columns if column in schema}
-
-
-def _schema_name_for_dataset_2007_2017(dataset: str) -> str:
-    """Return schema file base name for a given 2007–2017 dataset.
-
-    Currently only loans are supported for this period.
-    """
-    if dataset == "loans":
-        return "hmda_lar_schema_2007-2017"
-    raise ValueError(f"Unsupported dataset for 2007-2017: {dataset}")
 
 
 def _rename_columns_period_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
@@ -122,60 +85,38 @@ def _rename_columns_period_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
 
 def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
     """Destring numeric HMDA variables and cast to consistent types.
-    
-    Handles string values like "NA", "N/A", "Not applicable" by converting them
-    to null, then casts integer columns to Int64 and float columns to Float64.
-    
+
+    Casts integer columns to Int64 and float columns to Float64.
+    Non-numeric strings are automatically converted to null via strict=False.
+
     Parameters
     ----------
     lf : pl.LazyFrame
         HMDA data with potentially mixed string/numeric columns
-        
+
     Returns
     -------
     pl.LazyFrame
         LazyFrame with consistent Int64/Float64 types for numeric columns
     """
     logger.info("Destringing HMDA variables and casting to consistent types (2007-2017)")
-    
-    # Cast float columns to Float64 with robust NA handling
-    for col in lf.columns:
-        if col in PERIOD_2007_2017_FLOAT_COLUMNS:
-            col_dtype = lf.schema[col]
-            if col_dtype == pl.String:
-                # Handle string columns with NA values
-                lf = lf.with_columns(
-                    pl.when(
-                        pl.col(col).is_in(["NA", "N/A", "Not applicable", "Not Applicable", "na", "n/a", ""])
-                    )
-                    .then(None)
-                    .otherwise(pl.col(col))
-                    .cast(pl.Float64, strict=False)
-                    .alias(col)
-                )
-            else:
-                # Already numeric, just cast to ensure Float64
-                lf = lf.with_columns(pl.col(col).cast(pl.Float64, strict=False).alias(col))
-    
-    # Cast integer columns to Int64 with robust NA handling
-    for col in lf.columns:
-        if col in PERIOD_2007_2017_INTEGER_COLUMNS:
-            col_dtype = lf.schema[col]
-            if col_dtype == pl.String:
-                # Handle string columns with NA values
-                lf = lf.with_columns(
-                    pl.when(
-                        pl.col(col).is_in(["NA", "N/A", "Not applicable", "Not Applicable", "na", "n/a", ""])
-                    )
-                    .then(None)
-                    .otherwise(pl.col(col))
-                    .cast(pl.Int64, strict=False)
-                    .alias(col)
-                )
-            else:
-                # Already numeric, just cast to ensure Int64
-                lf = lf.with_columns(pl.col(col).cast(pl.Int64, strict=False).alias(col))
-    
+
+    # Cast float columns to Float64
+    float_cols_to_cast = [col for col in lf.columns if col in PERIOD_2007_2017_FLOAT_COLUMNS]
+    if float_cols_to_cast:
+        lf = lf.with_columns([
+            pl.col(col).cast(pl.Float64, strict=False).alias(col)
+            for col in float_cols_to_cast
+        ])
+
+    # Cast integer columns to Int64
+    int_cols_to_cast = [col for col in lf.columns if col in PERIOD_2007_2017_INTEGER_COLUMNS]
+    if int_cols_to_cast:
+        lf = lf.with_columns([
+            pl.col(col).cast(pl.Int64, strict=False).alias(col)
+            for col in int_cols_to_cast
+        ])
+
     return lf
 
 
@@ -218,8 +159,6 @@ def build_bronze_period_2007_2017(
     raw_folder = RAW_DIR / dataset
     bronze_folder = get_medallion_dir("bronze", dataset, "period_2007_2017")
     bronze_folder.mkdir(parents=True, exist_ok=True)
-
-    schema_path = get_schema_path(_schema_name_for_dataset_2007_2017(dataset))
 
     for year in range(min_year, max_year + 1):
         archives = sorted(raw_folder.glob(f"*{year}*.zip"))
@@ -291,12 +230,6 @@ def build_silver_period_2007_2017(
         shutil.rmtree(silver_folder)
         silver_folder.mkdir(parents=True, exist_ok=True)
 
-    schema_path = get_schema_path(_schema_name_for_dataset_2007_2017(dataset))
-    schema = get_file_schema(schema_file=Path(schema_path), schema_type="polars")
-    if not isinstance(schema, dict):
-        raise ValueError(f"Expected dict schema, got {type(schema)}")
-
-    files_processed = 0
     for year in range(min_year, max_year + 1):
         for file in sorted(bronze_folder.glob(f"*{year}*.parquet")):
             lf = pl.scan_parquet(file, low_memory=True)
@@ -308,14 +241,7 @@ def build_silver_period_2007_2017(
             lf = _destring_and_cast_hmda_cols_2007_2017(lf)
 
             # Drop derived columns that only appear in some files (inconsistent)
-            derived_cols_to_drop = [
-                "derived_dwelling_category",
-                "derived_ethnicity", 
-                "derived_loan_product_type",
-                "derived_race",
-                "derived_sex",
-            ]
-            lf = lf.drop(derived_cols_to_drop, strict=False)
+            lf = lf.drop(DERIVED_COLUMNS, strict=False)
 
             # Optionally drop tract summary variables
             if drop_tract_vars:
@@ -341,13 +267,3 @@ def build_silver_period_2007_2017(
                 ),
                 mkdir=True,
             )
-            files_processed += 1
-
-    if files_processed == 0:
-        logger.info(
-            "No bronze files found for %s in %s-%s at %s",
-            dataset,
-            min_year,
-            max_year,
-            bronze_folder,
-        )
