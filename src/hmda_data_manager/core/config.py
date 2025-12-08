@@ -269,6 +269,37 @@ PERIOD_2007_2017_FLOAT_COLUMNS = [
 
 
 # ============================================================================
+# Column Rename Dictionary (Legacy → Modern Names)
+# ============================================================================
+
+# Comprehensive dictionary mapping legacy HMDA column names to modern standardized names.
+# Applied across all time periods during silver layer construction.
+# Only columns that exist in the data will be renamed (safe application).
+
+RENAME_DICTIONARY = {
+    # Core field renames (2007-2017 period)
+    "as_of_year": "activity_year",
+    "applicant_income_000s": "income",
+    "loan_amount_000s": "loan_amount",
+    "census_tract_number": "census_tract",
+    # Occupancy variants (pre-2007 and 2007-2017)
+    "occupancy": "occupancy_type",  # Pre-2007 format
+    "owner_occupancy": "occupancy_type",  # 2007-2017 format
+    # MSA/MD standardization (pre-2007 and 2007-2017)
+    "msamd": "msa_md",
+    # Tract variable renames (2007-2017 period)
+    "population": "tract_population",
+    "minority_population": "tract_minority_population_percent",
+    "hud_median_family_income": "ffiec_msa_md_median_family_income",
+    "tract_to_msamd_income": "tract_to_msa_income_percentage",
+    "number_of_owner_occupied_units": "tract_owner_occupied_units",
+    "number_of_1_to_4_family_units": "tract_one_to_four_family_units",
+    # Post-2018 corrections
+    "loan_to_value_ratio": "combined_loan_to_value_ratio",
+}
+
+
+# ============================================================================
 # Helper Functions
 # ============================================================================
 

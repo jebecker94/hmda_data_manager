@@ -37,6 +37,7 @@ from ..config import (
     POST2018_FLOAT_COLUMNS,
     POST2018_INTEGER_COLUMNS,
     POST2018_EXEMPT_COLUMNS,
+    RENAME_DICTIONARY,
 )
 
 
@@ -247,37 +248,6 @@ def _append_hmda_index(
         )
     )
 
-def _rename_columns(lf: pl.LazyFrame) -> pl.LazyFrame:
-    """Rename columns for post2018 files to standardize naming.
-
-    Note: If other errors in the variable names are discovered, add them here.
-    
-    Parameters
-    ----------
-    lf : pl.LazyFrame
-        Input lazy frame
-        
-    Returns
-    -------
-    pl.LazyFrame
-        Lazy frame with renamed columns
-    """
-    rename_dict = {
-        "loan_to_value_ratio": "combined_loan_to_value_ratio",
-    }
-    return lf.rename(rename_dict, strict=False)
-
-
-def _schema_name_for_dataset(dataset: str) -> str:
-    """Return schema file base name for a given post-2018 dataset."""
-    if dataset == "loans":
-        return "hmda_lar_schema_post2018"
-    if dataset == "panel":
-        return "hmda_panel_schema_post2018"
-    if dataset == "transmissal_series":
-        return "hmda_ts_schema_post2018"
-    raise ValueError(f"Unsupported dataset: {dataset}")
-
 
 def build_bronze_post2018(
     dataset: Literal["loans", "panel", "transmissal_series"],
@@ -382,7 +352,18 @@ def build_silver_post2018(
 
             # Apply renames and conversions
             if dataset == "loans":
-                lf = _rename_columns(lf)
+
+                # Apply column renames (only renames columns that exist)
+                existing_cols = lf.collect_schema().names()
+                renames_to_apply = {
+                    old: new for old, new in RENAME_DICTIONARY.items() if old in existing_cols
+                }
+                if renames_to_apply:
+                    logger.debug(
+                        "Renaming %d columns: %s", len(renames_to_apply), renames_to_apply
+                    )
+                    lf = lf.rename(renames_to_apply)
+                # lf = _rename_columns(lf)
                 lf = _harmonize_schema(lf)
 
             # Write using hive partitioning

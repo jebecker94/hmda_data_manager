@@ -32,55 +32,13 @@ from ..config import (
     RAW_DIR,
     get_medallion_dir,
     DERIVED_COLUMNS,
+    RENAME_DICTIONARY,
     PERIOD_2007_2017_TRACT_COLUMNS,
     PERIOD_2007_2017_INTEGER_COLUMNS,
     PERIOD_2007_2017_FLOAT_COLUMNS,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _rename_columns_period_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
-    """Rename columns for 2007-2017 files to standardize naming.
-    
-    Handles the inconsistency where 1 file uses modern names while 11 files
-    use legacy names. This maps legacy -> modern standardized names.
-    
-    Parameters
-    ----------
-    lf : pl.LazyFrame
-        Input lazy frame
-        
-    Returns
-    -------
-    pl.LazyFrame
-        Lazy frame with standardized column names
-    """
-    rename_dict = {
-        # Legacy -> Modern standardized names
-        "as_of_year": "activity_year",
-        "applicant_income_000s": "income", 
-        "loan_amount_000s": "loan_amount",
-        "census_tract_number": "census_tract",
-        "owner_occupancy": "occupancy_type",
-        "msamd": "msa_md",
-        "population": "tract_population",
-        "minority_population": "tract_minority_population_percent",
-        "hud_median_family_income": "ffiec_msa_md_median_family_income",
-        "tract_to_msamd_income": "tract_to_msa_income_percentage",
-        "number_of_owner_occupied_units": "tract_owner_occupied_units",
-        "number_of_1_to_4_family_units": "tract_one_to_four_family_units",
-    }
-    
-    # Only rename columns that actually exist in this file
-    existing_renames = {old: new for old, new in rename_dict.items() if old in lf.collect_schema().names()}
-    
-    if existing_renames:
-        logger.debug("Renaming %d columns: %s", len(existing_renames), existing_renames)
-        return lf.rename(existing_renames)
-    else:
-        logger.debug("No columns to rename (already using modern names)")
-        return lf
 
 
 def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
@@ -340,8 +298,16 @@ def build_silver_period_2007_2017(
         for file in sorted(bronze_folder.glob(f"*{year}*.parquet")):
             lf = pl.scan_parquet(file, low_memory=True)
 
-            # Standardize column names (legacy -> modern)
-            lf = _rename_columns_period_2007_2017(lf)
+            # Apply column renames (only renames columns that exist)
+            existing_cols = lf.collect_schema().names()
+            renames_to_apply = {
+                old: new for old, new in RENAME_DICTIONARY.items() if old in existing_cols
+            }
+            if renames_to_apply:
+                logger.debug(
+                    "Renaming %d columns: %s", len(renames_to_apply), renames_to_apply
+                )
+                lf = lf.rename(renames_to_apply)
 
             # Destring and cast integer columns to consistent Int64 types
             lf = _destring_and_cast_hmda_cols_2007_2017(lf)

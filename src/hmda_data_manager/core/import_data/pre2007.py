@@ -18,7 +18,7 @@ import logging
 from typing import Literal
 import polars as pl
 from ...utils.io import get_delimiter, should_process_output
-from ..config import RAW_DIR, get_medallion_dir
+from ..config import RAW_DIR, get_medallion_dir, RENAME_DICTIONARY
 
 
 logger = logging.getLogger(__name__)
@@ -318,40 +318,6 @@ def _harmonize_schema_pre2007(lf: pl.LazyFrame) -> pl.LazyFrame:
     return lf
 
 
-def _rename_columns_pre2007(lf: pl.LazyFrame) -> pl.LazyFrame:
-    """Rename columns for pre-2007 files to standardize naming.
-
-    Handles inconsistencies in column naming across years:
-    - "occupancy" (2004-2006) -> "occupancy_type"
-    - Other legacy names -> modern standardized names
-
-    Parameters
-    ----------
-    lf : pl.LazyFrame
-        Input lazy frame
-
-    Returns
-    -------
-    pl.LazyFrame
-        Lazy frame with standardized column names
-    """
-    rename_dict = {
-        "occupancy": "occupancy_type",
-        "msamd": "msa_md",
-    }
-
-    # Only rename columns that exist
-    existing_cols = lf.collect_schema().names()
-    renames = {old: new for old, new in rename_dict.items() if old in existing_cols}
-
-    if renames:
-        logger.debug("Renaming %d columns: %s", len(renames), renames)
-        return lf.rename(renames)
-    else:
-        logger.debug("No columns to rename")
-        return lf
-
-
 def build_silver_pre2007(
     dataset: Literal["loans", "panel", "transmissal_series"],
     min_year: int = 1990,
@@ -408,8 +374,18 @@ def build_silver_pre2007(
         # Load bronze as LazyFrame
         lf = pl.scan_parquet(bronze_file)
 
+        # Apply column renames (only renames columns that exist)
+        existing_cols = lf.collect_schema().names()
+        renames_to_apply = {
+            old: new for old, new in RENAME_DICTIONARY.items() if old in existing_cols
+        }
+        if renames_to_apply:
+            logger.debug(
+                "Renaming %d columns: %s", len(renames_to_apply), renames_to_apply
+            )
+            lf = lf.rename(renames_to_apply)
+
         # Apply transformations
-        lf = _rename_columns_pre2007(lf)
         lf = _harmonize_schema_pre2007(lf)
         lf = _standardize_geographic_codes(lf)
 
