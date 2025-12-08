@@ -76,11 +76,6 @@ This document collects ideas beyond the core import/validation pipeline, focused
 ## Phase 7: Data Export & Integration
 
 ### Multiple Output Formats
-- [ ] **Statistical Software Integration**
-  - [ ] Enhanced Stata export with variable labels
-  - [ ] SAS dataset creation with proper formats
-  - [ ] SPSS file generation with metadata
-  - [ ] R data frame export utilities
 - [ ] **Database Integration**
   - [ ] PostgreSQL schema and loading scripts
   - [ ] SQLite database creation for lightweight analysis
