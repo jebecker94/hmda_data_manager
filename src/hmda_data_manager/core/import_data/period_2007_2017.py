@@ -89,6 +89,10 @@ def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
     Casts integer columns to Int64 and float columns to Float64.
     Non-numeric strings are automatically converted to null via strict=False.
 
+    Special handling for loan_amount and income:
+    - Stored in thousands in raw data (e.g., "150" = $150,000)
+    - Multiplied by 1000 to get actual dollar amounts
+
     Parameters
     ----------
     lf : pl.LazyFrame
@@ -110,12 +114,114 @@ def _destring_and_cast_hmda_cols_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
         ])
 
     # Cast integer columns to Int64
-    int_cols_to_cast = [col for col in lf.columns if col in PERIOD_2007_2017_INTEGER_COLUMNS]
+    int_cols_to_cast = [
+        col for col in lf.columns
+        if col in PERIOD_2007_2017_INTEGER_COLUMNS
+    ]
     if int_cols_to_cast:
         lf = lf.with_columns([
             pl.col(col).cast(pl.Int64, strict=False).alias(col)
             for col in int_cols_to_cast
         ])
+
+    # Special handling: loan_amount stored in thousands, multiply by 1000
+    if "loan_amount" in lf.columns:
+        lf = lf.with_columns(
+            pl.col("loan_amount")
+            .mul(1000)
+            .alias("loan_amount")
+        )
+
+    # Special handling: income stored in thousands, multiply by 1000
+    if "income" in lf.columns:
+        lf = lf.with_columns(
+            pl.col("income")
+            .mul(1000)
+            .alias("income")
+        )
+
+    return lf
+
+
+def _standardize_geographic_codes_period_2007_2017(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Standardize geographic codes for 2007-2017 data.
+
+    Creates properly formatted FIPS codes and MSA/MD codes:
+    - state_code: 2-digit string with leading zeros
+    - county_code: 5-digit string (state + county) with leading zeros
+    - census_tract: 11-digit string (state + county + tract) with leading zeros
+    - msa_md: 5-digit string with leading zeros
+
+    2007-2017 format (after renaming):
+    - state_code: numeric 1-2 digits (or already 2-digit string)
+    - county_code: numeric 3 digits (county within state)
+    - census_tract: string/numeric format (varies by year)
+    - msa_md: numeric variable length
+
+    Post-standardization format:
+    - state_code: "01" to "56" (2-digit FIPS)
+    - county_code: "01001" (state + county, 5-digit)
+    - census_tract: "01001950902" (state + county + tract, 11-digit)
+    - msa_md: "01234" (5-digit MSA/MD code)
+
+    Parameters
+    ----------
+    lf : pl.LazyFrame
+        Input lazy frame with geographic codes
+
+    Returns
+    -------
+    pl.LazyFrame
+        Lazy frame with standardized geographic codes
+    """
+    # Step 1: Standardize state_code to 2-digit string with leading zeros
+    if "state_code" in lf.collect_schema().names():
+        lf = lf.with_columns(
+            pl.col("state_code")
+            .cast(pl.Int64, strict=False)
+            .cast(pl.String)
+            .str.zfill(2)
+            .alias("state_code")
+        )
+
+    # Step 2: Create 5-digit county_code (state + county)
+    if "county_code" in lf.collect_schema().names() and "state_code" in lf.collect_schema().names():
+        lf = lf.with_columns(
+            (
+                pl.col("state_code") +
+                pl.col("county_code")
+                .cast(pl.Int64, strict=False)
+                .cast(pl.String)
+                .str.zfill(3)
+            ).alias("county_code")
+        )
+
+    # Step 3: Standardize census_tract to 11-digit string
+    if "census_tract" in lf.collect_schema().names():
+        lf = lf.with_columns(
+            (
+                pl.col("state_code") +
+                pl.col("county_code").str.slice(-3, 3) +
+                pl.col("census_tract")
+                .cast(pl.Float64, strict=False)
+                .mul(100)
+                .round(0)
+                .cast(pl.Int64, strict=False)
+                .cast(pl.String)
+                .str.zfill(6)
+            ).alias("census_tract")
+        )
+
+    # Step 4: Standardize msa_md to 5-digit string with leading zeros
+    if "msa_md" in lf.collect_schema().names():
+        lf = lf.with_columns(
+            pl.col("msa_md")
+            .cast(pl.Float64, strict=False)
+            .cast(pl.Int64, strict=False)
+            .cast(pl.String)
+            .str.zfill(5)
+            .alias("msa_md")
+        )
 
     return lf
 
@@ -239,6 +345,9 @@ def build_silver_period_2007_2017(
 
             # Destring and cast integer columns to consistent Int64 types
             lf = _destring_and_cast_hmda_cols_2007_2017(lf)
+
+            # Standardize geographic codes (state, county, census_tract, msa_md)
+            lf = _standardize_geographic_codes_period_2007_2017(lf)
 
             # Drop derived columns that only appear in some files (inconsistent)
             lf = lf.drop(DERIVED_COLUMNS, strict=False)

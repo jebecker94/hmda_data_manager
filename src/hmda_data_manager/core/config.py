@@ -253,17 +253,18 @@ PERIOD_2007_2017_INTEGER_COLUMNS = [
     "edit_status",
     "sequence_number",
     "application_date_indicator",
+    "tract_population",
+    "ffiec_msa_md_median_family_income",
+    "tract_owner_occupied_units",
+    "tract_one_to_four_family_units",
+    "tract_median_age_of_housing_units",
 ]
 
 # Float columns for 2007-2017 data
 PERIOD_2007_2017_FLOAT_COLUMNS = [
     "rate_spread",
     "tract_minority_population_percent",
-    "ffiec_msa_md_median_family_income",
     "tract_to_msa_income_percentage",
-    "tract_owner_occupied_units",
-    "tract_one_to_four_family_units",
-    "tract_median_age_of_housing_units",
 ]
 
 
