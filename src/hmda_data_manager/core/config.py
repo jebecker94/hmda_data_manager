@@ -141,6 +141,64 @@ POST2018_EXEMPT_COLUMNS = [
 
 
 # ============================================================================
+# Pre-2007 Data Constants
+# ============================================================================
+
+# Columns to convert to integers in pre-2007 silver layer
+PRE2007_INTEGER_COLUMNS = [
+    "activity_year",
+    "loan_amount",  # Will be multiplied by 1000
+    "income",  # Will be multiplied by 1000
+    "occupancy_type",
+    "edit_status",  # 5=Validity edit failure(s), 6=Quality edit failure(s), 7=Both
+    "sequence_number",
+    "lien_status",
+    "hoepa_status",
+    "preapproval",
+    "property_type",
+    "loan_type",
+    "loan_purpose",
+    "action_taken",
+    "purchaser_type",
+    # Demographic columns (non-numeric values treated as errors, converted to null)
+    "applicant_sex",
+    "co_applicant_sex",
+    "applicant_ethnicity",
+    "co_applicant_ethnicity",
+    "applicant_race_1",
+    "applicant_race_2",
+    "applicant_race_3",
+    "applicant_race_4",
+    "applicant_race_5",
+    "co_applicant_race_1",
+    "co_applicant_race_2",
+    "co_applicant_race_3",
+    "co_applicant_race_4",
+    "co_applicant_race_5",
+    # Denial reasons (non-numeric values treated as errors, converted to null)
+    "denial_reason_1",
+    "denial_reason_2",
+    "denial_reason_3",
+]
+
+# Columns to convert to floats in pre-2007 silver layer
+PRE2007_FLOAT_COLUMNS = [
+    "rate_spread",
+]
+
+# Note: msa_md is standardized to 5-digit string with leading zeros in _standardize_geographic_codes()
+
+# Note: agency_code contains both numeric (1-7) and letter codes (B,C,D,E,X)
+# Letter codes indicate State Exempts:
+#   B = FRS (Federal Reserve System)
+#   C = FDIC (Federal Deposit Insurance Corporation)
+#   D = OTS (Office of Thrift Supervision)
+#   E = NCUA (National Credit Union Administration)
+#   X = Unidentified
+# Due to mixed numeric/letter values, agency_code is kept as String type
+
+
+# ============================================================================
 # 2007-2017 Data Constants
 # ============================================================================
 

@@ -34,6 +34,9 @@ from .config import (
     POST2018_FLOAT_COLUMNS,
     POST2018_INTEGER_COLUMNS,
     POST2018_EXEMPT_COLUMNS,
+    # Pre-2007 constants
+    PRE2007_INTEGER_COLUMNS,
+    PRE2007_FLOAT_COLUMNS,
     # 2007-2017 constants
     PERIOD_2007_2017_TRACT_COLUMNS,
     PERIOD_2007_2017_INTEGER_COLUMNS,
@@ -42,7 +45,8 @@ from .config import (
 
 # Import data import functions
 from .import_data import (
-    import_hmda_pre_2007,
+    build_bronze_pre2007,
+    build_silver_pre2007,
     build_bronze_period_2007_2017,
     build_silver_period_2007_2017,
     build_bronze_post2018,
@@ -72,12 +76,16 @@ __all__ = [
     "POST2018_FLOAT_COLUMNS",
     "POST2018_INTEGER_COLUMNS",
     "POST2018_EXEMPT_COLUMNS",
+    # Pre-2007 constants
+    "PRE2007_INTEGER_COLUMNS",
+    "PRE2007_FLOAT_COLUMNS",
     # 2007-2017 constants
     "PERIOD_2007_2017_TRACT_COLUMNS",
     "PERIOD_2007_2017_INTEGER_COLUMNS",
     "PERIOD_2007_2017_FLOAT_COLUMNS",
     # Import functions
-    "import_hmda_pre_2007",
+    "build_bronze_pre2007",
+    "build_silver_pre2007",
     "build_bronze_period_2007_2017",
     "build_silver_period_2007_2017",
     "build_bronze_post2018",

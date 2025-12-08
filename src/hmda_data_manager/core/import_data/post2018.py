@@ -287,9 +287,13 @@ def build_bronze_post2018(
 ) -> None:
     """Create bronze layer parquet files for post-2018 data.
 
-    Reads raw ZIPs from data/raw/<dataset>, extracts, detects delimiter, limits
-    schema, adds file_type and (for loans) HMDAIndex, drops derived/tract columns,
-    and writes one parquet per archive to data/bronze/<dataset>/post2018.
+    Reads raw ZIPs from data/raw/<dataset>, extracts, detects delimiter,
+    loads all columns as strings (bronze = minimal processing), adds file_type
+    and (for loans) HMDAIndex, drops derived/tract columns, and writes one
+    parquet per archive to data/bronze/<dataset>/post2018.
+
+    All columns are stored as strings in bronze to preserve raw values and
+    enable inspection/validation before silver layer type conversions.
     """
     raw_folder = RAW_DIR / dataset
     bronze_folder = get_medallion_dir("bronze", dataset, "post2018")
@@ -321,13 +325,14 @@ def build_bronze_post2018(
                 delimiter = get_delimiter(raw_file_path, bytes=16000)
 
                 # Build lazyframe; add row index only when creating HMDAIndex
+                # Load all columns as strings (bronze = raw data preservation)
                 index_name = HMDA_INDEX_COLUMN if add_hmda_index else None
                 lf = pl.scan_csv(
                     raw_file_path,
                     separator=delimiter,
                     low_memory=True,
                     row_index_name=index_name,
-                    infer_schema_length=None,
+                    infer_schema=False,  # Force all columns to String type
                 )
 
                 # Add file_type and HMDAIndex if requested

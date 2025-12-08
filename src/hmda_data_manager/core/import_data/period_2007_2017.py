@@ -209,8 +209,11 @@ def build_bronze_period_2007_2017(
     """Create bronze parquet files for 2007–2017 data.
 
     - Reads raw ZIPs from data/raw/<dataset>
-    - Extracts, detects delimiter, limits schema
+    - Extracts, detects delimiter, loads all columns as strings
     - Writes one parquet per archive to data/bronze/<dataset>/period_2007_2017
+
+    All columns are stored as strings in bronze to preserve raw values and
+    enable inspection/validation before silver layer type conversions.
     """
     raw_folder = RAW_DIR / dataset
     bronze_folder = get_medallion_dir("bronze", dataset, "period_2007_2017")
@@ -236,11 +239,12 @@ def build_bronze_period_2007_2017(
             try:
                 delimiter = get_delimiter(raw_file_path, bytes=16000)
 
+                # Load all columns as strings (bronze = raw data preservation)
                 lf = pl.scan_csv(
                     raw_file_path,
                     separator=delimiter,
                     low_memory=True,
-                    infer_schema_length=None,
+                    infer_schema=False,  # Force all columns to String type
                 )
 
                 # Keep bronze minimal: no renames, no derived handling
