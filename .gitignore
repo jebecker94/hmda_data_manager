@@ -16,6 +16,7 @@ data/**/*.txt
 
 # Cursor
 .cursor/
+.claude/
 
 # Other
 .DS_Store

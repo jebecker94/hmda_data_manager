@@ -11,7 +11,6 @@ The following roadmap outlines priorities for improving code organization, consi
 - [x] Create comprehensive example workflows
 
 ### Documentation & Standards (Completed)
-- [x] Create `.cursor/rules` for IDE integration
 - [x] Update `README.md` with package usage examples
 - [x] Document examples in `examples/README.md`
 - [x] Establish coding standards in `AGENTS.md`
