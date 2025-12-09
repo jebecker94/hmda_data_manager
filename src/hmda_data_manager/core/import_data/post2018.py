@@ -193,6 +193,15 @@ def _harmonize_schema(lf: pl.LazyFrame) -> pl.LazyFrame:
                 .alias(column)
             )
 
+    # Clean income columns (only if column exists)
+    if "income" in lf_columns:
+        lf = lf.with_columns(
+            pl.col("income")
+            .mul(1000)
+            .replace([-99999000], [-99999])
+            .alias("income")
+        )
+
     # Standardize census_tract column format (if present)
     if "census_tract" in lf_columns:
         lf = (
