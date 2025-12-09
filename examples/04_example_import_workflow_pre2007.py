@@ -1,118 +1,135 @@
-#!/usr/bin/env python
 """
-Example: Pre-2007 HMDA Data Import Workflow
+HMDA Data Import Workflow Example - Pre-2007 Data
+==================================================
 
-Complete workflow for importing pre-2007 HMDA data (1990-2006).
+This example demonstrates how to use the hmda_data_manager package to import
+and process HMDA data for years 1990-2006 using the modular import functions.
 
-This example demonstrates the full medallion architecture for legacy HMDA data:
-- Bronze layer: Raw data extracted from ZIPs, all columns as strings
-- Silver layer: Type-converted, cleaned, analysis-ready data
-
-Prerequisites:
-1. Download raw data from openICPSR Project 151921
-2. Place ZIP files in data/raw/
-
-Note: 1981-1989 data is excluded by default (1981 contains aggregate census
-tract data rather than individual loans, and 1982-1989 have a different schema)
+The workflow includes:
+1. Setting up paths and configuration
+2. Building Bronze (per dataset)
+3. Building Silver (hive-partitioned, per file)
 
 Data Source:
-Forrester, Andrew. Converted Home Mortgage Disclosure Act Data, 1981-2006.
-Inter-university Consortium for Political and Social Research [distributor],
-2021-08-30. https://doi.org/10.3886/E151921V1
+-----------
+Forrester, Andrew. Historical Home Mortgage Disclosure Act (HMDA) Data.
+Ann Arbor, MI: Inter-university Consortium for Political and Social Research
+[distributor], V1 (2021). https://doi.org/10.3886/E151921V1
 
-Schema Evolution:
-- 1990-2003: 23 columns (basic format)
-- 2004-2006: 38 columns (expanded with multiple race fields, ethnicity, rate spread)
+Note: Pre-2007 data uses fixed-width format converted to delimited files.
+      1981-1989 data is excluded (different schema and data structure).
+
 """
 
+import logging
+from pathlib import Path
+
+# Import the modular functions
+from hmda_data_manager.core import (
+    RAW_DIR,
+    BRONZE_DIR,
+    SILVER_DIR,
+)
 from hmda_data_manager.core.import_data.pre2007 import (
     build_bronze_pre2007,
     build_silver_pre2007,
 )
 
-print("="*80)
-print("PRE-2007 HMDA DATA IMPORT WORKFLOW")
-print("="*80)
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-# ==============================================================================
-# BUILD BRONZE LAYER (RAW → BRONZE)
-# ==============================================================================
+def main():
+    """Main workflow for importing pre-2007 HMDA data."""
 
-print("\n" + "="*80)
-print("STEP 1: Building Bronze Layer (1990-2006)")
-print("="*80)
-print("\nExtracting from ZIP archives and saving as parquet...")
-print("All columns are kept as strings for maximum data preservation.\n")
+    logger.info("Starting HMDA Pre-2007 Data Import Workflow")
+    logger.info("=" * 60)
 
-# Build bronze for loans (LAR)
-print("Building bronze for LOANS (LAR)...")
-build_bronze_pre2007("loans", min_year=1990, max_year=2006)
+    # =============================================================================
+    # 1. Configuration and Setup
+    # =============================================================================
 
-# Build bronze for panel (lender information)
-print("\nBuilding bronze for PANEL (lender information)...")
-build_bronze_pre2007("panel", min_year=1990, max_year=2006)
+    logger.info("1. Setting up configuration...")
 
-# Build bronze for transmittal series (submission metadata)
-print("\nBuilding bronze for TRANSMITTAL SERIES (submission metadata)...")
-build_bronze_pre2007("transmissal_series", min_year=1990, max_year=2006)
+    # Define years to process (adjust as needed)
+    # Note: 1981-1989 excluded due to different schema
+    min_year = 1990
+    max_year = 2006
 
-print("\n" + "="*80)
-print("BRONZE LAYER COMPLETE")
-print("="*80)
-print("\nBronze files saved to:")
-print("  - data/bronze/loans/pre2007/")
-print("  - data/bronze/panel/pre2007/")
-print("  - data/bronze/transmissal_series/pre2007/")
-print("\nEach year is saved as a separate parquet file (e.g., loans_2006.parquet)")
+    # Define folders
+    raw_folder = RAW_DIR
+    bronze_folder = BRONZE_DIR
+    silver_folder = SILVER_DIR
 
-# ==============================================================================
-# BUILD SILVER LAYER (BRONZE → SILVER)
-# ==============================================================================
+    logger.info(f"  Raw data folder: {raw_folder}")
+    logger.info(f"  Bronze data folder: {bronze_folder}")
+    logger.info(f"  Silver data folder: {silver_folder}")
+    logger.info(f"  Processing years: {min_year} to {max_year}")
 
-print("\n" + "="*80)
-print("STEP 2: Building Silver Layer (1990-2006)")
-print("="*80)
-print("\nApplying schema harmonization and geographic standardization...")
-print("Transformations:")
-print("  - Type conversions: 31 integer columns, 1 float column")
-print("  - Geographic codes: state (2-digit), county (5-digit), tract (11-digit)")
-print("  - Dollar amounts: loan_amount and income multiplied by 1000")
-print("  - Column renaming: occupancy -> occupancy_type, msamd -> msa_md\n")
+    # Ensure bronze/silver directories exist for datasets
+    for subdir in ["loans", "panel", "transmissal_series"]:
+        (bronze_folder / subdir / "pre2007").mkdir(parents=True, exist_ok=True)
+        (silver_folder / subdir / "pre2007").mkdir(parents=True, exist_ok=True)
 
-# Build silver for loans (LAR)
-print("Building silver for LOANS (LAR)...")
-build_silver_pre2007("loans", min_year=1990, max_year=2006)
+    # =============================================================================
+    # 2. Build Bronze (Pre-2007)
+    # =============================================================================
+    logger.info("2. Building Bronze (per dataset)...")
 
-# Build silver for panel (lender information)
-print("\nBuilding silver for PANEL (lender information)...")
-build_silver_pre2007("panel", min_year=1990, max_year=2006)
+    try:
+        build_bronze_pre2007("loans", min_year=min_year, max_year=max_year)
+        build_bronze_pre2007("panel", min_year=min_year, max_year=max_year)
+        build_bronze_pre2007("transmissal_series", min_year=min_year, max_year=max_year)
+        logger.info("  ✅ Bronze build completed")
+    except Exception as e:
+        logger.error(f"  ❌ Error building bronze: {e}")
+        return False
 
-# Build silver for transmittal series (submission metadata)
-print("\nBuilding silver for TRANSMITTAL SERIES (submission metadata)...")
-build_silver_pre2007("transmissal_series", min_year=1990, max_year=2006)
+    # =============================================================================
+    # 3. Build Silver (Hive-partitioned)
+    # =============================================================================
 
-print("\n" + "="*80)
-print("SILVER LAYER COMPLETE")
-print("="*80)
-print("\nSilver files saved to:")
-print("  - data/silver/loans/pre2007/activity_year=YYYY/")
-print("  - data/silver/panel/pre2007/activity_year=YYYY/")
-print("  - data/silver/transmissal_series/pre2007/activity_year=YYYY/")
-print("\nData is Hive-partitioned by activity_year for efficient querying")
+    logger.info("3. Building Silver (hive-partitioned) for loans/panel/ts...")
 
-print("\n" + "="*80)
-print("QUERY EXAMPLES")
-print("="*80)
-print("\n# Load all years lazily:")
-print("import polars as pl")
-print("lf = pl.scan_parquet('data/silver/loans/pre2007/**/*.parquet')")
-print()
-print("# Load specific year:")
-print("lf = pl.scan_parquet('data/silver/loans/pre2007/activity_year=2006/*.parquet')")
-print()
-print("# Collect to DataFrame:")
-print("df = lf.collect()")
+    try:
+        build_silver_pre2007("loans", min_year=min_year, max_year=max_year, replace=True)
+        build_silver_pre2007("panel", min_year=min_year, max_year=max_year, replace=True)
+        build_silver_pre2007("transmissal_series", min_year=min_year, max_year=max_year, replace=True)
+        logger.info("  ✅ Silver build completed")
+    except Exception as e:
+        logger.error(f"  ❌ Error building silver: {e}")
+        return False
 
-print("\n" + "="*80)
-print("WORKFLOW COMPLETE")
-print("="*80)
+    return True
+
+if __name__ == "__main__":
+    """
+    Run the import workflow.
+
+    Before running:
+    1. Download raw data from openICPSR Project 151921
+       https://www.openicpsr.org/openicpsr/project/151921/version/V1/view
+    2. Place ZIP files in data/raw/{loans,panel,transmissal_series}/
+       Expected files: HMDA_YYYY.zip (e.g., HMDA_2006.zip)
+    3. Adjust the min_year and max_year variables above as needed
+    4. Ensure you have sufficient disk space for the processed files
+
+    Schema Evolution:
+    - 1990-2003: 23 columns (basic format)
+    - 2004-2006: 38 columns (expanded with race, ethnicity, rate spread)
+
+    Usage:
+        python examples/04_example_import_workflow_pre2007.py
+    """
+
+    success = main()
+
+    if success:
+        print("\n✅ Import workflow completed successfully!")
+        print("Check the logs above for detailed information about the imported data.")
+    else:
+        print("\n❌ Import workflow failed!")
+        print("Check the error messages above for troubleshooting information.")
