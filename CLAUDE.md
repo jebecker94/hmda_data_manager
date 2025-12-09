@@ -238,12 +238,9 @@ Post-2018 files include extensive census tract summary statistics (population, i
 ## Testing
 
 - Tests located in `tests/` directory
-- Existing test coverage:
-  - `test_cleaning_utilities.py` - Outlier detection, data cleaning
-  - `test_import_common.py` - Import function helpers
-  - `test_save_file_to_stata.py` - Export functionality
-- Run tests before committing: `pytest`
-- Note in PR if no tests collected
+- Currently no automated tests (tests for legacy pandas code were removed)
+- Future: Add tests for core pipeline functions as needed
+- Run tests: `pytest` (will show "no tests collected" until tests are added)
 
 ## Project Planning
 
