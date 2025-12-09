@@ -9,14 +9,16 @@ logger = logging.getLogger(__name__)
 
 # Load Dataset
 # Note: Using direct parquet reading - replace path with your actual clean data location
-data_path = DATA_DIR / "clean" / "loans" / "2024_public_lar.parquet"
-dataset = pl.scan_parquet(data_path)
+# Load silver data instead of clean data
+data_path = DATA_DIR / "bronze" / "loans" / "post2018" / "**/*.parquet"
+df = pl.scan_parquet(data_path, extra_columns='ignore')
 
 # Polars Filters
-dataset = dataset.filter([pl.col("action_taken") == 1])
+df = df.filter([pl.col("action_taken")=="1"])
+df = df.filter(pl.col('activity_year')=="2024")
 
 # See how many total originations there are
-logger.info("Length: %s", dataset.select(pl.len()).collect())
+logger.info("Length: %s", df.select(pl.len()).collect())
 
 # Columns missing for exempt
 exempt_columns = [
@@ -39,7 +41,6 @@ exempt_columns = [
     "interest_rate",
     "property_value",
     "rate_spread",
-    "hoepa_status",
     "loan_term",
     "total_loan_costs",
     "total_points_and_fees",
@@ -51,13 +52,13 @@ exempt_columns = [
 ]
 
 # Then filter and select the desired columns
-df_weird = (
-    dataset.with_columns(
+df_exemptions = (
+    df.with_columns(
         # Count Exemptions by summing boolean conditions cast to integers
         pl.sum_horizontal(
             [
                 pl.col(column).cast(pl.Utf8).is_in(["1111", "Exempt"]).cast(pl.Int64)
-                for column in exempt_columns
+                for column in exempt_columns if column in df.columns
             ]
         ).alias("CountExemptions")
     )
@@ -75,10 +76,12 @@ df_weird = (
     .select(
         # Select the final set of columns
         ["HMDAIndex", "lei", "activity_year"]
-        + exempt_columns
+        + [column for column in exempt_columns if column in df.columns]
         + ["CountExemptions", "AverageExemptions"]
     )
 )
 
 # See How Many "Weird" Reporters there are
-logger.info("Length: %s", df_weird.select(pl.len()).collect())
+logger.info("Length: %s", df_exemptions.select(pl.len()).collect())
+
+df_exemptions = df_exemptions.collect()
