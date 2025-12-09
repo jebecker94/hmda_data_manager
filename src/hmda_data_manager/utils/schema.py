@@ -1,68 +1,9 @@
 """
-Schema utilities: loading CFPB HTML schemas and renaming columns.
+Schema utilities: column renaming and standardization.
 """
 
-from pathlib import Path
 import pandas as pd
 import polars as pl
-import pyarrow as pa
-
-
-def get_file_schema(
-    schema_file: Path | str, schema_type: str = "pyarrow"
-) -> pa.Schema | dict[str, str] | dict[str, pl.DataType]:
-    """Convert the CFPB HMDA schema HTML to pyarrow/pandas/polars schema."""
-    if schema_type not in ["pyarrow", "pandas", "polars"]:
-        raise ValueError('schema_type must be "pyarrow", "pandas" or "polars"')
-
-    df = pd.read_html(schema_file)[0]
-    FieldVar = "Field" if "Field" in df.columns else "Fields"
-    LengthVar = "Max Length" if "Max Length" in df.columns else "Maximum Length"
-
-    if schema_type == "pyarrow":
-        schema = []
-        for _, row in df.iterrows():
-            pa_type = pa.string()
-            if row["Type"] == "Numeric":
-                pa_type = pa.float64()
-            if (row["Type"] == "Numeric") & (row[LengthVar] <= 4):
-                pa_type = pa.int16()
-            if (row["Type"] == "Numeric") & (row[LengthVar] > 4):
-                pa_type = pa.int32()
-            if (row["Type"] == "Numeric") & (row[LengthVar] > 9):
-                pa_type = pa.int64()
-            schema.append((row[FieldVar], pa_type))
-        return pa.schema(schema)
-
-    if schema_type == "pandas":
-        schema: dict[str, str] = {}
-        for _, row in df.iterrows():
-            pd_type = "str"
-            if row["Type"] == "Numeric":
-                pd_type = "Float64"
-            if (row["Type"] == "Numeric") & (row[LengthVar] <= 4):
-                pd_type = "Int16"
-            if (row["Type"] == "Numeric") & (row[LengthVar] > 4):
-                pd_type = "Int32"
-            if (row["Type"] == "Numeric") & (row[LengthVar] > 9):
-                pd_type = "Int64"
-            schema[row[FieldVar]] = pd_type
-        return schema
-
-    # polars
-    schema_pl: dict[str, pl.DataType] = {}
-    for _, row in df.iterrows():
-        pl_type: pl.DataType = pl.String
-        if row["Type"] == "Numeric":
-            pl_type = pl.Float64
-        if (row["Type"] == "Numeric") & (row[LengthVar] <= 4):
-            pl_type = pl.Int16
-        if (row["Type"] == "Numeric") & (row[LengthVar] > 4):
-            pl_type = pl.Int32
-        if (row["Type"] == "Numeric") & (row[LengthVar] > 9):
-            pl_type = pl.Int64
-        schema_pl[row[FieldVar]] = pl_type
-    return schema_pl
 
 
 def rename_hmda_columns(
@@ -93,7 +34,6 @@ def rename_hmda_columns(
 
 
 __all__ = [
-    "get_file_schema",
     "rename_hmda_columns",
 ]
 

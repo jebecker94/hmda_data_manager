@@ -74,12 +74,11 @@ src/hmda_data_manager/
 │   └── period_2007_2017.py
 ├── utils/                  # Utility functions
 │   ├── io.py              # File operations (unzip, delimiter detection)
-│   ├── schema.py          # Schema parsing and column mapping
+│   ├── schema.py          # Column mapping and standardization
 │   ├── cleaning.py        # Data cleaning pipeline
 │   ├── identity.py        # Record keys and deduplication
 │   ├── geo.py             # Tract variable handling
 │   └── export.py          # Stata export
-└── schemas/               # HTML schema files for validation
 ```
 
 ## Common Commands
@@ -240,7 +239,6 @@ Post-2018 files include extensive census tract summary statistics (population, i
 
 - Tests located in `tests/` directory
 - Existing test coverage:
-  - `test_get_file_schema.py` - Schema parsing validation
   - `test_cleaning_utilities.py` - Outlier detection, data cleaning
   - `test_import_common.py` - Import function helpers
   - `test_save_file_to_stata.py` - Export functionality

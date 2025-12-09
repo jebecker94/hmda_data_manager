@@ -91,11 +91,7 @@ from hmda_data_manager.core import build_bronze_pre2007, build_silver_pre2007
 2. ✅ **Example workflow:** `examples/04_example_import_workflow_pre2007.py`
 3. ✅ **Inspection script:** `examples/inspect_bronze_pre2007.py` (loads silver data)
 
-3. **No schema files:**
-   - No `schemas/hmda_lar_schema_pre2007.html`
-   - No validation infrastructure
-
-4. **Incomplete dataset support:**
+3. **Incomplete dataset support:**
    - Only LAR implemented
    - Panel and TS not handled
 
@@ -222,10 +218,9 @@ parent_addr, parent_city, parent_state, parent_zip_code, edit_status, tax_id
 - **Impact**: Potential encoding/conversion issues
 - **Mitigation**: Validate record counts, test data quality
 
-#### 5. No Validation Schemas
-- **Issue**: No HTML schema files for automated validation
-- **Impact**: Can't use `get_file_schema()` function
-- **Workaround**: Define schemas programmatically in code
+#### 5. Schema Validation
+- **Approach**: Schemas defined programmatically in code
+- **Implementation**: Column renaming and type casting in silver layer
 
 ### Architectural Challenges
 
@@ -277,19 +272,6 @@ assert "respondent_id" in df.columns
 ```
 
 ### Priority 5: Future Enhancements (LOW PRIORITY)
-
-#### Create Schema HTML Files
-
-**Files to create:**
-- `schemas/hmda_lar_schema_pre2007_early.html` (1990-2003)
-- `schemas/hmda_lar_schema_pre2007_late.html` (2004-2006)
-- `schemas/hmda_panel_schema_pre2007.html`
-- `schemas/hmda_ts_schema_pre2007.html`
-
-**Benefits:**
-- Programmatic validation via `get_file_schema()`
-- Documentation reference
-- Type inference automation
 
 #### Lender Utilities
 

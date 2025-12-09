@@ -17,7 +17,6 @@ The modules will be populated during migration from root-level scripts:
 
 # Import key functions from support module
 from .schema import (
-    get_file_schema,
     rename_hmda_columns,
 )
 from .io import (
@@ -50,15 +49,14 @@ from .geo import (
 
 __all__ = [
     # Schema and file handling
-    "get_file_schema",
     "get_delimiter",
     "unzip_hmda_file",
     "replace_csv_column_names",
-    
+
     # Data transformation
     "rename_hmda_columns",
     "coerce_numeric_columns",
-    
+
     # Data cleaning pipelines
     "clean_hmda",
     "harmonize_census_tract",
@@ -66,13 +64,13 @@ __all__ = [
     "clean_rate_spread",
     "flag_outliers_basic",
     "downcast_hmda_variables"
-    
+
     # Key utilities
     "add_identity_keys",
     "deduplicate_records",
     "replace_na_like_values",
     "standardize_schema",
-    
+
     # Export functions
     "save_file_to_stata",
     "prepare_hmda_for_stata",

@@ -32,15 +32,11 @@ The following roadmap outlines priorities for improving code organization, consi
   - [x] INFO: Progress and completion status (via logger.info calls)
   - [x] WARNING: Non-critical issues (via logger.warning calls)
   - [x] ERROR: Critical failures (via logger.error calls)
-- [ ] Add progress bars for long-running operations
 - [ ] Create centralized logging configuration (currently using per-module logging.getLogger)
 
 ### Configuration Management
-- [ ] Expand `config.py` with comprehensive settings
+- [x] Expand `config.py` with comprehensive settings
   - [ ] Default file naming conventions
-  - [ ] Processing parameters (memory limits, chunk sizes)
-  - [ ] Output format preferences
-  - [ ] Validation thresholds
 - [ ] Add configuration validation on startup
 - [ ] Support multiple environment configurations (dev/prod)
 - [ ] Create configuration documentation and examples
@@ -61,23 +57,18 @@ The following roadmap outlines priorities for improving code organization, consi
 - [ ] Unit tests for all core functions (partial)
   - [ ] Import functions with mock data
   - [ ] Configuration loading and validation
-  - [x] Schema parsing and validation (`test_get_file_schema.py`)
   - [x] File handling edge cases (`test_cleaning_utilities.py` exists)
 - [ ] Integration tests with sample HMDA data
   - [ ] End-to-end workflow tests
   - [ ] Cross-year compatibility tests
-  - [ ] Performance benchmarks
 - [ ] Data quality tests (partial)
   - [ ] Schema compliance validation
   - [ ] Cross-reference integrity checks
   - [x] Statistical reasonableness tests (`test_cleaning_utilities.py` includes outlier tests)
 
 ### Schema Management
-- [x] Create programmatic schema parsers for HTML files (`get_file_schema` in `utils/schema.py`)
-- [ ] Implement schema version detection and handling
 - [x] Add column mapping utilities for schema changes (`rename_hmda_columns` in `utils/schema.py`)
-- [ ] Create schema comparison tools for validation
-- [ ] Build schema documentation generators
+- [ ] Create schema comparison tools for validation across years
 
 ## Phase 4: HMDA-Specific Data Quality & Validation
 
@@ -116,17 +107,3 @@ The following roadmap outlines priorities for improving code organization, consi
   - [x] Implement chunked processing for large datasets (Polars LazyFrame provides lazy evaluation)
   - [ ] Memory profiling and optimization
   - [x] Lazy loading strategies for large files (Polars LazyFrame used throughout)
-
-## Implementation Priority
-
-**High Priority**
-- Error handling standardization
-- Comprehensive testing suite  
-- Data quality validation tools
-
-**Medium Priority**
-- Performance optimizations
-
-**Lower Priority**
-- API development
-- Machine learning integration
