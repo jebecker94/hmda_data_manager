@@ -36,10 +36,14 @@ HMDA data files are large and complex, spanning multiple time periods with diffe
 
 ### Time Period Support
 
-**Pre-2007** (Historical HMDA)
+**Pre-2007** (Historical HMDA, 1990-2006)
 - Source: openICPSR Historical HMDA package (Forrester, 2021)
 - Fixed-width format converted to delimited files
-- Status: In development
+- **Coverage**: 18 years of LAR (1990-2006), plus panel and transmittal series
+- **Characteristics**: Simpler schema (23-38 columns) with evolution over time
+- **Special note**: 1981 data contains aggregate census tract data, not individual loans
+- **Status**: Bronze and silver pipelines implemented, Hive-partitioned by activity_year
+- **Example**: `examples/04_example_import_workflow_pre2007.py`
 
 **2007-2017** (Standardized Period)
 - Source: FFIEC/CFPB HMDA platform

@@ -2,7 +2,7 @@
 
 This document collects ideas beyond the core import/validation pipeline, focused on analysis, visualization, reporting, and integrations.
 
-## Phase 5: Advanced HMDA Analysis Tools
+## Extension 1: Advanced HMDA Analysis Tools
 
 ### Market Analysis & Statistics
 - [ ] **Market Concentration Analysis**
@@ -49,7 +49,7 @@ This document collects ideas beyond the core import/validation pipeline, focused
   - [ ] Market interconnectedness analysis
   - [ ] Supply chain analysis in mortgage markets
 
-## Phase 6: Visualization & Reporting
+## Extension 2: Visualization & Reporting
 
 ### Automated Chart Generation
 - [ ] **Standard Chart Library**
@@ -73,7 +73,7 @@ This document collects ideas beyond the core import/validation pipeline, focused
   - [ ] Lender branch and market area mapping
   - [ ] Choropleth maps for lending metrics
 
-## Phase 7: Data Export & Integration
+## Extension 3: Data Export & Integration
 
 ### Multiple Output Formats
 - [ ] **Database Integration**
