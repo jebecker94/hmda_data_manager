@@ -67,6 +67,7 @@ POST2018_FLOAT_COLUMNS = [
 
 # Integer columns for post-2018 data
 POST2018_INTEGER_COLUMNS = [
+    "activity_year",
     "loan_type",
     "loan_purpose",
     "occupancy_type",
@@ -105,6 +106,27 @@ POST2018_INTEGER_COLUMNS = [
     "purchaser_type",
     "submission_of_application",
     "initially_payable_to_institution",
+    "preapproval",
+    "lien_status",
+    "reverse_mortgage",
+    "open_end_line_of_credit",
+    "business_or_commercial_purpose",
+    "hoepa_status",
+    "negative_amortization",
+    "interest_only_payment",
+    "balloon_payment",
+    "other_nonamortizing_features",
+    "construction_method",
+    "manufactured_home_secured_property_type",
+    "manufactured_home_land_property_interest",
+    "applicant_credit_score_type",
+    "co_applicant_credit_score_type",
+    "applicant_race_observed",
+    "co_applicant_race_observed",
+    "applicant_ethnicity_observed",
+    "co_applicant_ethnicity_observed",
+    "applicant_sex_observed",
+    "co_applicant_sex_observed",
     "aus_1",
     "aus_2",
     "aus_3",
@@ -119,6 +141,11 @@ POST2018_INTEGER_COLUMNS = [
     "tract_one_to_four_family_homes",
     "tract_median_age_of_housing_units",
     "conforming_loan_limit",
+    "agency_code",
+    "assets",
+    "other_lender_code",
+    "lar_count",
+    "calendar_quarter",
 ]
 
 # Columns that may contain "Exempt" values requiring special handling

@@ -9,15 +9,19 @@ from hmda_data_manager.core import (
     SILVER_DIR,
 )
 
-# Read from hive-partitioned database (created by example_import_workflow_post2018.py)
-# This demonstrates efficient querying of the partitioned dataset
+# Print schemas period-by-period
+print("Silver folder schemas:")
+print('Post-2018 schema:')
 df = pl.scan_parquet(SILVER_DIR / "loans" / "post2018" / "**/*.parquet")
-
-# Print schema
-print("Silver folder schema:")
-print(dict(df.collect_schema()))
-
-# Loop and display
 for column, dtype in df.collect_schema().items():
     print(f"{column}: {dtype}")
 
+print('Period 2007-2017 schema:')
+df = pl.scan_parquet(SILVER_DIR / "loans" / "period_2007_2017" / "**/*.parquet")
+for column, dtype in df.collect_schema().items():
+    print(f"{column}: {dtype}")
+
+print('Pre-2007 schema:')
+df = pl.scan_parquet(SILVER_DIR / "loans" / "pre2007" / "**/*.parquet")
+for column, dtype in df.collect_schema().items():
+    print(f"{column}: {dtype}")

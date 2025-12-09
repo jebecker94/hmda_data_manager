@@ -106,73 +106,78 @@ def _harmonize_schema(lf: pl.LazyFrame) -> pl.LazyFrame:
         and formatted census tract column.
     """
 
-    # Replace exempt columns with -99999
+    # Get existing columns once at the start
+    lf_columns = lf.collect_schema().names()
+
+    # Replace exempt columns with -99999 (only if they exist)
     for exempt_col in POST2018_EXEMPT_COLUMNS:
+        if exempt_col in lf_columns:
+            lf = lf.with_columns(
+                pl.col(exempt_col)
+                .replace("Exempt", "-99999")
+                .alias(exempt_col)
+            )
+
+    # Clean Units (only if column exists)
+    if "total_units" in lf_columns:
         lf = lf.with_columns(
-            pl.col(exempt_col)
-            .replace("Exempt", "-99999")
-            .alias(exempt_col)
+            pl.col("total_units")
+            .replace(
+                ["5-24", "25-49", "50-99", "100-149", ">149"],
+                [5, 6, 7, 8, 9],
+            )
+            .cast(pl.Int16, strict=False)
+            .alias("total_units")
         )
 
-    # Clean Units
-    replace_column = "total_units"
-    lf = lf.with_columns(
-        pl.col(replace_column)
-        .replace(
-            ["5-24", "25-49", "50-99", "100-149", ">149"],
-            [5, 6, 7, 8, 9],
-        )
-        .cast(pl.Int16, strict=False)
-        .alias(replace_column)
-    )
-
-    # Clean Age
+    # Clean Age (only if columns exist)
     for replace_column in ["applicant_age", "co_applicant_age"]:
-        lf = lf.with_columns(
-            pl.col(replace_column)
-            .replace(
-                ["<25", "25-34", "35-44", "45-54", "55-64", "65-74", ">74"],
-                [1, 2, 3, 4, 5, 6, 7],
+        if replace_column in lf_columns:
+            lf = lf.with_columns(
+                pl.col(replace_column)
+                .replace(
+                    ["<25", "25-34", "35-44", "45-54", "55-64", "65-74", ">74"],
+                    [1, 2, 3, 4, 5, 6, 7],
+                )
+                .cast(pl.Int16, strict=False)
+                .alias(replace_column)
             )
-            .cast(pl.Int16, strict=False)
-            .alias(replace_column)
-        )
 
-    # Clean Age Dummy Variables
+    # Clean Age Dummy Variables (only if columns exist)
     for replace_column in ["applicant_age_above_62", "co_applicant_age_above_62"]:
-        lf = lf.with_columns(
-            pl.col(replace_column)
-            .replace(
-                ["No", "no", "NO", "Yes", "yes", "YES", "Na", "na", "NA"],
-                [0, 0, 0, 1, 1, 1, None, None, None],
+        if replace_column in lf_columns:
+            lf = lf.with_columns(
+                pl.col(replace_column)
+                .replace(
+                    ["No", "no", "NO", "Yes", "yes", "YES", "Na", "na", "NA"],
+                    [0, 0, 0, 1, 1, 1, None, None, None],
+                )
+                .cast(pl.Int16, strict=False)
+                .alias(replace_column)
             )
-            .cast(pl.Int16, strict=False)
-            .alias(replace_column)
+
+    # Clean Debt-to-Income (only if column exists)
+    if "debt_to_income_ratio" in lf_columns:
+        lf = lf.with_columns(
+            pl.col("debt_to_income_ratio")
+            .replace(
+                ["<20%", "20%-<30%", "30%-<36%", "50%-60%", ">60%", "Exempt"],
+                [10, 20, 30, 50, 60, -99999],
+            )
+            .cast(pl.Int64, strict=False)
+            .alias("debt_to_income_ratio")
         )
 
-    # Clean Debt-to-Income
-    replace_column = "debt_to_income_ratio"
-    lf = lf.with_columns(
-        pl.col(replace_column)
-        .replace(
-            ["<20%", "20%-<30%", "30%-<36%", "50%-60%", ">60%", "Exempt"],
-            [10, 20, 30, 50, 60, -99999],
+    # Clean Conforming Loan Limit (only if column exists)
+    if "conforming_loan_limit" in lf_columns:
+        lf = lf.with_columns(
+            pl.col("conforming_loan_limit")
+            .replace(["NC", "C", "U", "NA"], [0, 1, -99999, -99999])
+            .cast(pl.Int64, strict=False)
+            .alias("conforming_loan_limit")
         )
-        .cast(pl.Int64, strict=False)
-        .alias(replace_column)
-    )
-
-    # Clean Conforming Loan Limit (Leave as string for now)
-    replace_column = "conforming_loan_limit"
-    lf = lf.with_columns(
-        pl.col(replace_column)
-        .replace(["NC", "C", "U", "NA"], [0, 1, -99999, -99999])
-        .cast(pl.Int64, strict=False)
-        .alias(replace_column)
-    )
 
     # Cast safe strings to floats
-    lf_columns = lf.collect_schema().names()
     for column in POST2018_FLOAT_COLUMNS:
         if column in lf_columns:
             lf = lf.with_columns(
@@ -350,21 +355,19 @@ def build_silver_post2018(
         for file in bronze_folder.glob(f"*{year}*.parquet"):
             lf = pl.scan_parquet(file, low_memory=True)
 
-            # Apply renames and conversions
-            if dataset == "loans":
+            # Apply column renames (only renames columns that exist)
+            existing_cols = lf.collect_schema().names()
+            renames_to_apply = {
+                old: new for old, new in RENAME_DICTIONARY.items() if old in existing_cols
+            }
+            if renames_to_apply:
+                logger.debug(
+                    "Renaming %d columns: %s", len(renames_to_apply), renames_to_apply
+                )
+                lf = lf.rename(renames_to_apply)
 
-                # Apply column renames (only renames columns that exist)
-                existing_cols = lf.collect_schema().names()
-                renames_to_apply = {
-                    old: new for old, new in RENAME_DICTIONARY.items() if old in existing_cols
-                }
-                if renames_to_apply:
-                    logger.debug(
-                        "Renaming %d columns: %s", len(renames_to_apply), renames_to_apply
-                    )
-                    lf = lf.rename(renames_to_apply)
-                # lf = _rename_columns(lf)
-                lf = _harmonize_schema(lf)
+            # Apply schema harmonization (type conversions) to all datasets
+            lf = _harmonize_schema(lf)
 
             # Write using hive partitioning
             lf.sink_parquet(

@@ -83,9 +83,9 @@ def main():
     logger.info("3. Building Silver (hive-partitioned) for loans/panel/ts...")
 
     try:
-        build_silver_post2018("loans", min_year=min_year, max_year=max_year, replace=True)
-        build_silver_post2018("panel", min_year=min_year, max_year=max_year, replace=True)
-        build_silver_post2018("transmissal_series", min_year=min_year, max_year=max_year, replace=True)
+        build_silver_post2018("loans", min_year=min_year, max_year=max_year, replace=False)
+        build_silver_post2018("panel", min_year=min_year, max_year=max_year, replace=False)
+        build_silver_post2018("transmissal_series", min_year=min_year, max_year=max_year, replace=False)
         logger.info("  ✅ Silver build completed")
     except Exception as e:
         logger.error(f"  ❌ Error building silver: {e}")
