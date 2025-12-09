@@ -7,14 +7,12 @@ and process HMDA data for years 2018 and later using the modular import function
 
 The workflow includes:
 1. Setting up paths and configuration
-2. Loading schema information
-3. Building Bronze (per dataset)
-4. Building Silver (hive-partitioned, per file)
+2. Building Bronze (per dataset)
+3. Building Silver (hive-partitioned, per file)
 
 """
 
 import logging
-import polars as pl
 from pathlib import Path
 
 # Import the new modular functions
@@ -25,7 +23,6 @@ from hmda_data_manager.core import (
     build_bronze_post2018,
     build_silver_post2018,
 )
-from hmda_data_manager.schemas import get_schema_path
 
 # Set up logging
 logging.basicConfig(
@@ -64,32 +61,11 @@ def main():
     for subdir in ["loans", "panel", "transmissal_series"]:
         (bronze_folder / subdir / "post2018").mkdir(parents=True, exist_ok=True)
         (silver_folder / subdir / "post2018").mkdir(parents=True, exist_ok=True)
-    
+
     # =============================================================================
-    # 2. Get Schema Information
+    # 2. Build Bronze (Post-2018)
     # =============================================================================
-    
-    logger.info("2. Loading schema information...")
-    
-    try:
-        # Get schema files for post-2018 data
-        lar_schema_path = get_schema_path("hmda_lar_schema_post2018")
-        panel_schema_path = get_schema_path("hmda_panel_schema_post2018") 
-        ts_schema_path = get_schema_path("hmda_ts_schema_post2018")
-        
-        logger.info(f"  LAR schema: {lar_schema_path}")
-        logger.info(f"  Panel schema: {panel_schema_path}")
-        logger.info(f"  TS schema: {ts_schema_path}")
-        
-    except Exception as e:
-        logger.warning(f"Could not load schema files: {e}")
-        logger.info("Proceeding without explicit schema validation...")
-        lar_schema_path = panel_schema_path = ts_schema_path = None
-    
-    # =============================================================================
-    # 3. Build Bronze (Post-2018)
-    # =============================================================================
-    logger.info("3. Building Bronze (per dataset)...")
+    logger.info("2. Building Bronze (per dataset)...")
 
     try:
         build_bronze_post2018("loans", min_year=min_year, max_year=max_year)
@@ -101,10 +77,10 @@ def main():
         return False
 
     # =============================================================================
-    # 4. Build Silver (Hive-partitioned)
+    # 3. Build Silver (Hive-partitioned)
     # =============================================================================
 
-    logger.info("4. Building Silver (hive-partitioned) for loans/panel/ts...")
+    logger.info("3. Building Silver (hive-partitioned) for loans/panel/ts...")
 
     try:
         build_silver_post2018("loans", min_year=min_year, max_year=max_year, replace=True)

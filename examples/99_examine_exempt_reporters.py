@@ -2,7 +2,6 @@
 import logging
 
 import polars as pl
-from hmda_data_manager.utils import get_file_schema
 from hmda_data_manager.core import DATA_DIR
 
 
