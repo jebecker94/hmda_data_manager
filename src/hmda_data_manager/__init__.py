@@ -45,11 +45,21 @@ separate hmda-matching project.
 __version__ = "0.2.0"
 __author__ = "Jonathan E. Becker"
 
-# Public API will be populated as we migrate modules
-# For now, this serves as the package entry point
+# Import workflow functions for public API
+from .core.workflows import (
+    download_workflow,
+    import_post2018_workflow,
+    import_2007_2017_workflow,
+    import_pre2007_workflow,
+)
 
 __all__ = [
     "__version__",
     "__author__",
+    # Workflow functions
+    "download_workflow",
+    "import_post2018_workflow",
+    "import_2007_2017_workflow",
+    "import_pre2007_workflow",
 ]
 

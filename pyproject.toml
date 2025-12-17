@@ -22,5 +22,8 @@ dependencies = [
     "lxml>=6.0.2",
 ]
 
+[project.scripts]
+hmda = "hmda_data_manager.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/hmda_data_manager"]

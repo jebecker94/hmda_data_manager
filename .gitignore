@@ -19,5 +19,6 @@ data/**/*.txt
 .claude/
 
 # Other
+**/*.DS_Store
 .DS_Store
 **/*.egg-info
